@@ -202,7 +202,7 @@ namespace GenshinMusicPlayer
             return convertNoteNumberToName[noteNumber % 12] + (noteNumber / 12).ToString();
         }
 
-        public long Time { get; private set; }
+        public double Time { get; private set; }
         public int Number { get; private set; }
         public string Name {
             get
@@ -211,7 +211,7 @@ namespace GenshinMusicPlayer
             }
         }
 
-        public Note(long time, int number)
+        public Note(double time, int number)
         {
             if (number < 0)
             {
@@ -245,7 +245,7 @@ namespace GenshinMusicPlayer
 
         private string midiFilePath = "";
         private MidiFile midiFile = null;
-        private long maxNoteOffTime = 0;
+        private double maxNoteOffTime = 0;
         private BindingList<MidiFileProperty> midiFileProperties = new BindingList<MidiFileProperty>();
         private List<Note> notes = null;
         private IInstrument instrument = null;
@@ -264,6 +264,32 @@ namespace GenshinMusicPlayer
             maxNoteOffTime = 0;
 
             // Load File
+            double? quarterNoteTime = null;
+            bool errorFlag = false;
+            for (int track = 0; track < file.Tracks; track++)
+            {
+                foreach (var midiEvent in file.Events[track].OfType<TempoEvent>())
+                {
+                    if (!quarterNoteTime.HasValue)
+                    {
+                        quarterNoteTime = 60.0 / midiEvent.Tempo;
+                    }
+                    else
+                    {
+                        errorFlag = true;
+                    }
+                }
+            }
+            if (errorFlag)
+            {
+                MessageBox.Show(String.Format("MIDI 文件包含多于一个的速度标识，暂时不支持，会使用第一个速度 {0:F1} bpm。", quarterNoteTime));
+            }
+            if (!quarterNoteTime.HasValue)
+            {
+                MessageBox.Show("MIDI 文件中未找到速度标识，会使用默认速度 120 bpm。");
+                quarterNoteTime = 120;
+            }
+
             notes = new List<Note>();
             for (int track = 0; track < file.Tracks; track++)
             {
@@ -271,11 +297,13 @@ namespace GenshinMusicPlayer
                 {
                     if (MidiEvent.IsNoteOn(midiEvent))
                     {
-                        var currentNote = new Note(midiEvent.AbsoluteTime, midiEvent.NoteNumber);
+                        double startTime = (double)midiEvent.AbsoluteTime / file.DeltaTicksPerQuarterNote * quarterNoteTime.Value * 1000;
+                        double stopTime = (double)midiEvent.OffEvent.AbsoluteTime / file.DeltaTicksPerQuarterNote * quarterNoteTime.Value * 1000;
+                        var currentNote = new Note(startTime, midiEvent.NoteNumber);
                         notes.Add(currentNote);
                         if (minNote == null || currentNote.Number < minNote.Number) minNote = currentNote;
                         if (maxNote == null || currentNote.Number > maxNote.Number) maxNote = currentNote;
-                        if (midiEvent.OffEvent.AbsoluteTime > maxNoteOffTime) maxNoteOffTime = midiEvent.OffEvent.AbsoluteTime;
+                        if (stopTime > maxNoteOffTime) maxNoteOffTime = stopTime;
                     }
                 }
             }
@@ -324,8 +352,8 @@ namespace GenshinMusicPlayer
                     var result = instrument.CheckNotes(i, notes);
                     ComboBoxTone.Items.Add(String.Format("低音 do = {0} | {1} 个音符在范围外 | {2} 个音符和琴上相差半音", Note.GetNoteName((int)i), result.OutOfRangeCount, result.MissedCount));
                     if (bestResult == null 
-                        || result.OutOfRangeCount < bestResult.OutOfRangeCount 
-                        || (result.OutOfRangeCount == bestResult.OutOfRangeCount 
+                        || result.OutOfRangeCount < bestResult.OutOfRangeCount
+                        || (result.OutOfRangeCount == bestResult.OutOfRangeCount
                             && result.MissedCount < bestResult.MissedCount))
                     {
                         bestResult = result;
@@ -345,7 +373,7 @@ namespace GenshinMusicPlayer
             // Switch to Genshin window and wait...
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
-                TextBoxCurrentNote.Text = "3 秒后开始……";
+                TextBoxCurrentNote.Text = "正在将原神窗口切换到前台……";
             });
             foreach (var process in Process.GetProcesses())
             {
@@ -355,6 +383,10 @@ namespace GenshinMusicPlayer
                     break;
                 }
             }
+            Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
+            {
+                TextBoxCurrentNote.Text = "3 秒后开始……";
+            });
             Thread.Sleep(1000);
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
