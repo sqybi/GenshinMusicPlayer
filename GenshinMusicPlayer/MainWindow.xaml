@@ -3,10 +3,99 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:GenshinMusicPlayer"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        Title="原神音乐自动演奏" Height="768" Width="1280">
     <Grid>
-        
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="5" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="5" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <StackPanel>
+            <TextBlock HorizontalAlignment="Center" FontSize="20" Margin="10,10,10,0">加载 MIDI 文件</TextBlock>
+            <Separator Margin="10,10,10,0"/>
+            <Button x:Name="ButtonLoadMidiFile" Width="100" Margin="0,10,0,0" Click="ButtonLoadMidiFile_Click">加载文件</Button>
+            <Grid Margin="10,10,10,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock>当前文件名：</TextBlock>
+                <TextBox x:Name="TextBoxCurrentFileName" Grid.Column="1" IsReadOnly="True">
+                    <Binding Mode="OneWay"  />
+                </TextBox>
+            </Grid>
+            <Separator Margin="10,10,10,0"/>
+            <TextBlock Margin="10,10,10,0">当前文件信息：</TextBlock>
+            <ScrollViewer Margin="10,5,10,0" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto">
+                <ListView x:Name="ListViewFileProperties">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="属性" Width="Auto" DisplayMemberBinding="{Binding Path=Name}"/>
+                            <GridViewColumn Header="取值" Width="Auto" DisplayMemberBinding="{Binding Path=Value}"/>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </ScrollViewer>
+        </StackPanel>
+        <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" />
+        <StackPanel Grid.Column="2">
+            <TextBlock HorizontalAlignment="Center" FontSize="20" Margin="10,10,10,0">纠错和播放选项</TextBlock>
+            <Separator Margin="10,10,10,0"/>
+            <TextBlock Margin="10,10,10,0">乐器：</TextBlock>
+            <ComboBox x:Name="ComboBoxInstrument" Margin="10,5,10,0" SelectionChanged="ComboBoxInstrument_SelectionChanged">
+                <ComboBoxItem IsSelected="True">风物之诗琴</ComboBoxItem>
+                <ComboBoxItem>镜花之琴</ComboBoxItem>
+                <ComboBoxItem>老旧的诗琴</ComboBoxItem>
+            </ComboBox>
+            <TextBlock Margin="10,10,10,0">调性（乐器最低音）：</TextBlock>
+            <ComboBox x:Name="ComboBoxTone" Margin="10,5,10,0"/>
+            <TextBlock Margin="10,10,10,0">半音音符默认处理方式：</TextBlock>
+            <RadioButton x:Name="RadioButtonNoteSemitoneNotAllowed" GroupName="NoteSemitone" Margin="10,5,10,0" IsChecked="True">不允许</RadioButton>
+            <RadioButton x:Name="RadioButtonNoteSemitoneHigher" GroupName="NoteSemitone" Margin="10,5,10,0">优先升高半音</RadioButton>
+            <RadioButton x:Name="RadioButtonNoteSemitoneLower" GroupName="NoteSemitone" Margin="10,5,10,0">优先降低半音</RadioButton>
+            <TextBlock Margin="10,10,10,0">乐器范围外音符默认处理方式：</TextBlock>
+            <RadioButton x:Name="RadioButtonNoteOutOfRangeNotAllowed" GroupName="NoteOutOfRange" Margin="10,5,10,0" IsChecked="True">不允许</RadioButton>
+            <RadioButton x:Name="RadioButtonNoteOutOfRangeIgnored" GroupName="NoteOutOfRange" Margin="10,5,10,0">忽略</RadioButton>
+            <TextBlock Margin="10,10,10,0">合并演奏：</TextBlock>
+            <StackPanel Orientation="Horizontal" Margin="10,5,10,0">
+                <TextBlock>相差</TextBlock>
+                <TextBox x:Name="TextBoxNoteMerging" Margin="5,0" Width="30">0</TextBox>
+                <TextBlock>毫秒以内的音符</TextBlock>
+            </StackPanel>
+        </StackPanel>
+        <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Stretch" />
+        <Grid Grid.Column="4" Margin="10,10,10,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <TextBlock HorizontalAlignment="Center" FontSize="20">演奏音乐</TextBlock>
+            <Separator Grid.Row="1" Margin="0,10,0,0"/>
+            <Button Grid.Row="2" x:Name="ButtonStart" Width="100" Margin="0,10,0,0" Click="ButtonStart_Click">开始演奏</Button>
+            <Grid Grid.Row="3" Margin="0,10,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock>当前演奏音符：</TextBlock>
+                <TextBox x:Name="TextBoxCurrentNote" Grid.Column="1" IsReadOnly="True"></TextBox>
+            </Grid>
+            <TextBlock Grid.Row="4" Margin="0,10,0,0">历史音符：</TextBlock>
+            <ScrollViewer Grid.Row="5" Margin="0,5,0,0" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                <WrapPanel x:Name="WrapPanelHistoryNotes">
+                </WrapPanel>
+            </ScrollViewer>
+            <TextBlock Grid.Row="6" Margin="0,10,0,0">演奏进度：</TextBlock>
+            <ProgressBar x:Name="ProgressBarPlay" Grid.Row="7" Margin="0,10" Height="20" />
+        </Grid>
     </Grid>
 </Window>
