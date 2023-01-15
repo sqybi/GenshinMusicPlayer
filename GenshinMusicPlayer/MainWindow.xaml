@@ -54,6 +54,7 @@
             <ComboBox x:Name="ComboBoxTone" Margin="10,5,10,0"/>
             <TextBlock Margin="10,10,10,0">半音音符默认处理方式：</TextBlock>
             <RadioButton x:Name="RadioButtonNoteSemitoneNotAllowed" GroupName="NoteSemitone" Margin="10,5,10,0" IsChecked="True">不允许</RadioButton>
+            <RadioButton x:Name="RadioButtonNoteSemitoneIgnored" GroupName="NoteSemitone" Margin="10,5,10,0">忽略（推荐）</RadioButton>
             <RadioButton x:Name="RadioButtonNoteSemitoneHigher" GroupName="NoteSemitone" Margin="10,5,10,0">优先升高半音</RadioButton>
             <RadioButton x:Name="RadioButtonNoteSemitoneLower" GroupName="NoteSemitone" Margin="10,5,10,0">优先降低半音</RadioButton>
             <TextBlock Margin="10,10,10,0">乐器范围外音符默认处理方式：</TextBlock>

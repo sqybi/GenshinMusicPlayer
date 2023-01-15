@@ -9,22 +9,123 @@ using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 using System.Windows.Threading;
 using WindowsInput;
 using WindowsInput.Native;
 
 namespace GenshinMusicPlayer
 {
+    #region Structs
+
+    public class MidiFileProperty : INotifyPropertyChanged
+    {
+        public string Name { get; set; }
+        public string Value { get; set; }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        public void OnPropertyChanged(PropertyChangedEventArgs e)
+        {
+            PropertyChanged?.Invoke(this, e);
+        }
+    }
+
+    public class Note : IComparable
+    {
+        private static string[] convertNoteNumberToName = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+        public static string GetNoteName(int noteNumber)
+        {
+            return convertNoteNumberToName[noteNumber % 12] + (noteNumber / 12).ToString();
+        }
+
+        public double Time { get; private set; }
+        public int Number { get; private set; }
+        public string Name
+        {
+            get
+            {
+                return GetNoteName(Number);
+            }
+        }
+
+        int IComparable.CompareTo(object obj)
+        {
+            Note note = (Note)obj;
+            var compareTime = Time.CompareTo(note.Time);
+            if (compareTime == 0)
+            {
+                return Number.CompareTo(note.Number);
+            }
+            else
+            {
+                return compareTime;
+            }
+        }
+
+        public Note(Note note)
+        {
+            Time = note.Time;
+            Number = note.Number;
+        }
+
+        public Note(double time, int number)
+        {
+            if (number < 0)
+            {
+                throw new Exception("Illegal note number");
+            }
+            Time = time;
+            Number = number;
+        }
+    }
+
+    public class NoteToPlay : Note
+    {
+        // Modifcation:
+        // Null means no modification; true means semitone higher than original note; false means semitone lower than original note.
+        // If no key pressed, KeyboardPress will be "" and VirtualKeyCode will be null. Modification does not mean anything at this time.
+        public bool? Modification { get; private set; }
+        // KeyboardPress: the key name on keyboard pressed (without modifier).
+        public string KeyboardPress { get; private set; }
+        // VirtualKeyCodePress: the virtual key code corresponding to the key pressed (without modifier).
+        public VirtualKeyCode? VirtualKeyCodePress { get; private set; }
+
+        public NoteToPlay(Note note, bool? modification, string keyboardPress, VirtualKeyCode? virtualKeyCodePress) : base(note)
+        {
+            Modification = modification;
+            KeyboardPress = keyboardPress;
+            VirtualKeyCodePress = virtualKeyCodePress;
+        }
+
+        public NoteToPlay(double time, int number, bool? modification, string keyboardPress, VirtualKeyCode? virtualKeyCodePress) : base(time, number)
+        {
+            Modification = modification;
+            KeyboardPress = keyboardPress;
+            VirtualKeyCodePress = virtualKeyCodePress;
+        }
+
+        public override string ToString() {
+            StringBuilder sb = new StringBuilder();
+            if (!VirtualKeyCodePress.HasValue)
+            {
+                sb.Append("(");
+            }
+            sb.Append(Name);
+            if (Modification.HasValue)
+            {
+                sb.Append(Modification.Value ? "↗" : "↘");
+            }
+            if (!VirtualKeyCodePress.HasValue)
+            {
+                sb.Append(")");
+            }
+            return sb.ToString();
+        }
+    }
+
+    #endregion
+
     #region Instruments
 
     public class InstrumentCheckNotesResult
@@ -36,16 +137,22 @@ namespace GenshinMusicPlayer
     public interface IInstrument
     {
         InstrumentCheckNotesResult CheckNotes(int baseNoteNumber, List<Note> notes);
-        VirtualKeyCode? GetKeyCodeFromNote(int baseNoteNumber, Note note, bool isHigherFirst);
+        NoteToPlay GetKeyCodeFromNote(int baseNoteNumber, Note note, bool? isHigherFirst);
     }
 
-    public class BaseInstrument : IInstrument
+    public abstract class BaseInstrument : IInstrument
     {
         protected readonly VirtualKeyCode[] keyCodes = {
             VirtualKeyCode.VK_Z, VirtualKeyCode.VK_X, VirtualKeyCode.VK_C, VirtualKeyCode.VK_V, VirtualKeyCode.VK_B, VirtualKeyCode.VK_N, VirtualKeyCode.VK_M,
             VirtualKeyCode.VK_A, VirtualKeyCode.VK_S, VirtualKeyCode.VK_D, VirtualKeyCode.VK_F, VirtualKeyCode.VK_G, VirtualKeyCode.VK_H, VirtualKeyCode.VK_J,
             VirtualKeyCode.VK_Q, VirtualKeyCode.VK_W, VirtualKeyCode.VK_E, VirtualKeyCode.VK_R, VirtualKeyCode.VK_T, VirtualKeyCode.VK_Y, VirtualKeyCode.VK_U
         };
+        protected readonly string[] keyNames = {
+            "Z", "X", "C", "V", "B", "N", "M",
+            "A", "S", "D", "F", "G", "H", "J",
+            "Q", "W", "E", "R", "T", "Y", "U",
+        };
+        protected abstract int[] noteNumbers { get; }
 
         protected int BinarySearch(int[] data, int value)
         {
@@ -70,8 +177,8 @@ namespace GenshinMusicPlayer
             }
             return -1;
         }
-
-        protected InstrumentCheckNotesResult CheckNotesInternal(int baseNoteNumber, List<Note> notes, int[] noteNumbers)
+        
+        InstrumentCheckNotesResult IInstrument.CheckNotes(int baseNoteNumber, List<Note> notes)
         {
             int minNoteNumber = noteNumbers[0] + baseNoteNumber - 1;
             int maxNoteNumber = noteNumbers[noteNumbers.Length - 1] + baseNoteNumber + 1;
@@ -96,70 +203,61 @@ namespace GenshinMusicPlayer
             return result;
         }
 
-        protected VirtualKeyCode? GetKeyCodeFromNoteInternal(int baseNoteNumber, Note note, bool isHigherFirst, int[] noteNumbers)
+        NoteToPlay IInstrument.GetKeyCodeFromNote(int baseNoteNumber, Note note, bool? isHigherFirst)
         {
             int noteNumber = note.Number - baseNoteNumber;
 
             int pos = BinarySearch(noteNumbers, noteNumber);
             if (pos != -1)
             {
-                return keyCodes[pos];
+                return new NoteToPlay(note, null, keyNames[pos], keyCodes[pos]);
             }
 
-            if (isHigherFirst)
+            if (isHigherFirst.HasValue)
             {
-                noteNumber++;
-            }
-            else
-            {
-                noteNumber--;
-            }
-            pos = BinarySearch(noteNumbers, noteNumber);
-            if (pos != -1)
-            {
-                return keyCodes[pos];
+                bool modifier;
+                if (isHigherFirst.Value)
+                {
+                    noteNumber++;
+                    modifier = true;
+                }
+                else
+                {
+                    noteNumber--;
+                    modifier = false;
+                }
+                pos = BinarySearch(noteNumbers, noteNumber);
+                if (pos != -1)
+                {
+                    return new NoteToPlay(note, modifier, keyNames[pos], keyCodes[pos]);
+                }
+
+                if (isHigherFirst.Value)
+                {
+                    noteNumber -= 2;
+                    modifier = false;
+                }
+                else
+                {
+                    noteNumber += 2;
+                    modifier = true;
+                }
+                pos = BinarySearch(noteNumbers, noteNumber);
+                if (pos != -1)
+                {
+                    return new NoteToPlay(note, modifier, keyNames[pos], keyCodes[pos]);
+                }
             }
 
-            if (isHigherFirst)
-            {
-                noteNumber -= 2;
-            }
-            else
-            {
-                noteNumber += 2;
-            }
-            pos = BinarySearch(noteNumbers, noteNumber);
-            if (pos != -1)
-            {
-                return keyCodes[pos];
-            }
-
-            return null;
-        }
-
-        InstrumentCheckNotesResult IInstrument.CheckNotes(int baseNoteNumber, List<Note> notes)
-        {
-            throw new NotImplementedException();
-        }
-
-        VirtualKeyCode? IInstrument.GetKeyCodeFromNote(int baseNoteNumber, Note note, bool isHigherFirst)
-        {
-            throw new NotImplementedException();
+            return new NoteToPlay(note, null, "", null);
         }
     }
 
     public class 风物之诗琴 : BaseInstrument, IInstrument
     {
-        protected readonly int[] noteNumbers = { 0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24, 26, 28, 29, 31, 33, 35 };
-
-        public InstrumentCheckNotesResult CheckNotes(int baseNoteNumber, List<Note> notes)
+        protected override int[] noteNumbers
         {
-            return CheckNotesInternal(baseNoteNumber, notes, noteNumbers);
-        }
-
-        public VirtualKeyCode? GetKeyCodeFromNote(int baseNoteNumber, Note note, bool isHigherFirst)
-        {
-            return GetKeyCodeFromNoteInternal(baseNoteNumber, note, isHigherFirst, noteNumbers);
+            get { return new int[] { 0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24, 26, 28, 29, 31, 33, 35 }; }
         }
     }
 
@@ -167,74 +265,13 @@ namespace GenshinMusicPlayer
 
     public class 老旧的诗琴 : BaseInstrument, IInstrument
     {
-        protected readonly int[] noteNumbers = { 0, 2, 3, 5, 7, 9, 10, 12, 14, 15, 17, 19, 21, 22, 24, 25, 27, 29, 31, 32, 34 };
-
-        public InstrumentCheckNotesResult CheckNotes(int baseNoteNumber, List<Note> notes)
+        protected override int[] noteNumbers
         {
-            return CheckNotesInternal(baseNoteNumber, notes, noteNumbers);
-        }
-
-        public VirtualKeyCode? GetKeyCodeFromNote(int baseNoteNumber, Note note, bool isHigherFirst)
-        {
-            return GetKeyCodeFromNoteInternal(baseNoteNumber, note, isHigherFirst, noteNumbers);
+            get { return new int[] { 0, 2, 3, 5, 7, 9, 10, 12, 14, 15, 17, 19, 21, 22, 24, 25, 27, 29, 31, 32, 34 }; }
         }
     }
 
     #endregion
-
-    public class MidiFileProperty : INotifyPropertyChanged
-    {
-        public string Name { get; set; }
-        public string Value { get; set; }
-
-        public event PropertyChangedEventHandler PropertyChanged;
-        public void OnPropertyChanged(PropertyChangedEventArgs e)
-        {
-            PropertyChanged?.Invoke(this, e);
-        }
-    }
-
-    public class Note : IComparable
-    {
-        private static string[] convertNoteNumberToName = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
-        public static string GetNoteName(int noteNumber)
-        {
-            return convertNoteNumberToName[noteNumber % 12] + (noteNumber / 12).ToString();
-        }
-
-        public double Time { get; private set; }
-        public int Number { get; private set; }
-        public string Name {
-            get
-            {
-                return GetNoteName(Number);
-            }
-        }
-
-        public Note(double time, int number)
-        {
-            if (number < 0)
-            {
-                throw new Exception("Illegal note number");
-            }
-            Time = time;
-            Number = number;
-        }
-
-        int IComparable.CompareTo(object obj)
-        {
-            Note note = (Note)obj;
-            var compareTime = Time.CompareTo(note.Time);
-            if (compareTime == 0)
-            {
-                return Number.CompareTo(note.Number);
-            }
-            else
-            {
-                return compareTime;
-            }
-        }
-    }
 
     /// <summary>
     /// MainWindow.xaml 的交互逻辑
@@ -251,7 +288,7 @@ namespace GenshinMusicPlayer
         private IInstrument instrument = null;
 
         private int tone;
-        private bool isHigherFirst;
+        private bool? isHigherFirst;  // Null means ignore; true means higher semitone first; false means lower first.
         private long noteMergingTime;
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
@@ -418,15 +455,15 @@ namespace GenshinMusicPlayer
                 }
 
                 // Generate keys
-                List<Note> notesToPlay = new List<Note>();
+                List<NoteToPlay> notesToPlay = new List<NoteToPlay>();
                 List<VirtualKeyCode> keysToPress = new List<VirtualKeyCode>();
                 for (int i = noteIdx; i < nextNoteIdx; ++i)
                 {
-                    var keyCode = instrument.GetKeyCodeFromNote(tone, notes[i], isHigherFirst);
-                    if (keyCode.HasValue)
+                    var noteToPlay = instrument.GetKeyCodeFromNote(tone, notes[i], isHigherFirst);
+                    notesToPlay.Add(noteToPlay);
+                    if (noteToPlay.VirtualKeyCodePress.HasValue)
                     {
-                        notesToPlay.Add(notes[i]);
-                        keysToPress.Add(keyCode.Value);
+                        keysToPress.Add(noteToPlay.VirtualKeyCodePress.Value);
                     }
                 }
 
@@ -445,7 +482,7 @@ namespace GenshinMusicPlayer
                 Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
                 {
                     ProgressBarPlay.Value = (nextTimeToBePlayed - startTime).TotalMilliseconds / maxNoteOffTime * 100;
-                    TextBoxCurrentNote.Text = notesToPlay.Aggregate("", (text, note) => text + " " + note.Name).Substring(1);
+                    TextBoxCurrentNote.Text = notesToPlay.Aggregate("", (text, noteToPlay) => text + " " + noteToPlay.ToString()).Substring(1);
                     WrapPanelHistoryNotes.Children.Add(new TextBox() { Text = TextBoxCurrentNote.Text, Margin = new Thickness(2, 2, 2, 2) });
                 });
 
@@ -545,10 +582,15 @@ namespace GenshinMusicPlayer
             ProgressBarPlay.Value = 0;
 
             tone = ComboBoxTone.SelectedIndex;
-            isHigherFirst = RadioButtonNoteSemitoneHigher.IsChecked == true;
+            isHigherFirst = null;
+            if (RadioButtonNoteSemitoneIgnored.IsChecked != true)
+            {
+                isHigherFirst = RadioButtonNoteSemitoneHigher.IsChecked == true;
+            }
             noteMergingTime = (long)parseResult;
 
             Thread thread = new Thread(PlayMusic);
+            thread.IsBackground = true;
             thread.Start();
         }
 
