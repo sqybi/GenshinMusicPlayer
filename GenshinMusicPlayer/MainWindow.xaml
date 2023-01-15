@@ -81,7 +81,10 @@
             </Grid.RowDefinitions>
             <TextBlock HorizontalAlignment="Center" FontSize="20">演奏音乐</TextBlock>
             <Separator Grid.Row="1" Margin="0,10,0,0"/>
-            <Button Grid.Row="2" x:Name="ButtonStart" Width="100" Margin="0,10,0,0" Click="ButtonStart_Click">开始演奏</Button>
+            <StackPanel Grid.Row="2" Margin="0,10,0,0">
+                <Button x:Name="ButtonStart" Width="100" Click="ButtonStart_Click">开始演奏</Button>
+                <TextBlock Margin="0,2" HorizontalAlignment="Center">快捷键：Ctrl + Shift + F12</TextBlock>
+            </StackPanel>
             <Grid Grid.Row="3" Margin="0,10,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -91,7 +94,7 @@
                 <TextBox x:Name="TextBoxCurrentNote" Grid.Column="1" IsReadOnly="True"></TextBox>
             </Grid>
             <TextBlock Grid.Row="4" Margin="0,10,0,0">历史音符：</TextBlock>
-            <ScrollViewer Grid.Row="5" Margin="0,5,0,0" ScrollViewer.VerticalScrollBarVisibility="Auto">
+            <ScrollViewer x:Name="ScrollViewerHistoryNotes" Grid.Row="5" Margin="0,5,0,0" ScrollViewer.VerticalScrollBarVisibility="Auto">
                 <WrapPanel x:Name="WrapPanelHistoryNotes">
                 </WrapPanel>
             </ScrollViewer>

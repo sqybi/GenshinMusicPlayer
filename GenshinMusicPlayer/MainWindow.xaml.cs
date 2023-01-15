@@ -11,6 +11,7 @@ using System.Text;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using WindowsInput;
 using WindowsInput.Native;
@@ -125,7 +126,7 @@ namespace GenshinMusicPlayer
     }
 
     #endregion
-
+    
     #region Instruments
 
     public class InstrumentCheckNotesResult
@@ -291,8 +292,80 @@ namespace GenshinMusicPlayer
         private bool? isHigherFirst;  // Null means ignore; true means higher semitone first; false means lower first.
         private long noteMergingTime;
 
+        private bool isPlaying = false;
+
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern bool SwitchToThisWindow(IntPtr hWnd, bool fAltTab);
+
+        [DllImport("User32.dll")]
+        public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+        [DllImport("User32.dll")]
+        public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+        #region Hotkey
+
+        private HwndSource hwndSource;
+        private const int HOTKEY_ID = 1236841456;
+        private const int WM_HOTKEY = 0x0312;
+        private const uint VK_F12 = 0x7B;
+        private const uint MOD_CTRL_SHIFT = 0x0006;
+
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            var helper = new WindowInteropHelper(this);
+            hwndSource = HwndSource.FromHwnd(helper.Handle);
+            hwndSource.AddHook(HwndHook);
+            RegisterHotKey();
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            hwndSource.RemoveHook(HwndHook);
+            hwndSource = null;
+            UnregisterHotKey();
+            base.OnClosed(e);
+        }
+
+        private void RegisterHotKey()
+        {
+            var helper = new WindowInteropHelper(this);
+            if (!RegisterHotKey(helper.Handle, HOTKEY_ID, MOD_CTRL_SHIFT, VK_F12))
+            {
+                MessageBox.Show("热键注册不成功，请检查是否有冲突！");
+            }
+        }
+
+        private void UnregisterHotKey()
+        {
+            var helper = new WindowInteropHelper(this);
+            UnregisterHotKey(helper.Handle, HOTKEY_ID);
+        }
+
+        private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            switch (msg)
+            {
+                case WM_HOTKEY:
+                    switch (wParam.ToInt32())
+                    {
+                        case HOTKEY_ID:
+                            OnHotKeyPressed();
+                            handled = true;
+                            break;
+                    }
+                    break;
+            }
+            return IntPtr.Zero;
+        }
+
+        private void OnHotKeyPressed()
+        {
+            SwitchPlayingStatus();
+        }
+
+        #endregion
 
         private void LoadMidiFileInfo(MidiFile file)
         {
@@ -405,8 +478,90 @@ namespace GenshinMusicPlayer
             }
         }
 
+        private void SwitchPlayingStatus()
+        {
+            if (!isPlaying)
+            {
+                ButtonStart.IsEnabled = false;
+
+                if (notes == null)
+                {
+                    MessageBox.Show("请先加载 MIDI 文件！");
+                    ButtonStart.IsEnabled = true;
+                    return;
+                }
+                if (ComboBoxInstrument.SelectedIndex == -1)
+                {
+                    MessageBox.Show("请选择乐器！");
+                    ButtonStart.IsEnabled = true;
+                    return;
+                }
+                if (ComboBoxTone.SelectedIndex == -1)
+                {
+                    MessageBox.Show("请选择调性！");
+                    ButtonStart.IsEnabled = true;
+                    return;
+                }
+                if (RadioButtonNoteSemitoneNotAllowed.IsChecked == true)
+                {
+                    var result = instrument.CheckNotes(ComboBoxTone.SelectedIndex, notes);
+                    if (result.MissedCount > 0)
+                    {
+                        MessageBox.Show("有不允许的半音音符存在！");
+                        ButtonStart.IsEnabled = true;
+                        return;
+                    }
+                }
+                if (RadioButtonNoteOutOfRangeNotAllowed.IsChecked == true)
+                {
+                    var result = instrument.CheckNotes(ComboBoxTone.SelectedIndex, notes);
+                    if (result.OutOfRangeCount > 0)
+                    {
+                        MessageBox.Show("有不允许的乐器范围外音符存在！");
+                        ButtonStart.IsEnabled = true;
+                        return;
+                    }
+                }
+                if (!ulong.TryParse(TextBoxNoteMerging.Text, out ulong parseResult))
+                {
+                    MessageBox.Show("音符合并演奏选项不是合法的正整数！");
+                    ButtonStart.IsEnabled = true;
+                    return;
+                }
+
+                // Disable load button here to avoid that we need to enable it again and again at the returns above.
+                ButtonLoadMidiFile.IsEnabled = false;
+
+                WrapPanelHistoryNotes.Children.Clear();
+                ProgressBarPlay.Value = 0;
+
+                tone = ComboBoxTone.SelectedIndex;
+                isHigherFirst = null;
+                if (RadioButtonNoteSemitoneIgnored.IsChecked != true)
+                {
+                    isHigherFirst = RadioButtonNoteSemitoneHigher.IsChecked == true;
+                }
+                noteMergingTime = (long)parseResult;
+
+                Thread thread = new Thread(PlayMusic);
+                thread.IsBackground = true;
+                thread.Start();
+            }
+            else
+            {
+                isPlaying = false;
+            }
+        }
+
         private void PlayMusic()
         {
+            Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
+            {
+                ButtonStart.Content = "停止演奏";
+                ButtonStart.IsEnabled = true;
+                isPlaying = true;
+            });
+
             // Switch to Genshin window and wait...
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
@@ -420,21 +575,25 @@ namespace GenshinMusicPlayer
                     break;
                 }
             }
+            if (!isPlaying) goto STOP_PLAYING;
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
                 TextBoxCurrentNote.Text = "3 秒后开始……";
             });
             Thread.Sleep(1000);
+            if (!isPlaying) goto STOP_PLAYING;
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
                 TextBoxCurrentNote.Text = "2 秒后开始……";
             });
             Thread.Sleep(1000);
+            if (!isPlaying) goto STOP_PLAYING;
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
                 TextBoxCurrentNote.Text = "1 秒后开始……";
             });
             Thread.Sleep(1000);
+            if (!isPlaying) goto STOP_PLAYING;
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
                 TextBoxCurrentNote.Text = "";
@@ -445,6 +604,8 @@ namespace GenshinMusicPlayer
             int noteIdx = 0;
             while (noteIdx < notes.Count)
             {
+                if (!isPlaying) goto STOP_PLAYING;
+
                 var nextTimeToBePlayed = startTime + TimeSpan.FromMilliseconds(notes[noteIdx].Time);
 
                 // Merge notes
@@ -466,6 +627,7 @@ namespace GenshinMusicPlayer
                         keysToPress.Add(noteToPlay.VirtualKeyCodePress.Value);
                     }
                 }
+                if (!isPlaying) goto STOP_PLAYING;
 
                 // Wait and press
                 var timeToSleep = nextTimeToBePlayed - DateTime.Now;
@@ -473,6 +635,7 @@ namespace GenshinMusicPlayer
                 {
                     Thread.Sleep(timeToSleep);
                 }
+                if (!isPlaying) goto STOP_PLAYING;
                 if (keysToPress.Count > 0)
                 {
                     sim.Keyboard.KeyPress(keysToPress.ToArray());
@@ -484,6 +647,7 @@ namespace GenshinMusicPlayer
                     ProgressBarPlay.Value = (nextTimeToBePlayed - startTime).TotalMilliseconds / maxNoteOffTime * 100;
                     TextBoxCurrentNote.Text = notesToPlay.Aggregate("", (text, noteToPlay) => text + " " + noteToPlay.ToString()).Substring(1);
                     WrapPanelHistoryNotes.Children.Add(new TextBox() { Text = TextBoxCurrentNote.Text, Margin = new Thickness(2, 2, 2, 2) });
+                    ScrollViewerHistoryNotes.ScrollToBottom();
                 });
 
                 noteIdx = nextNoteIdx;
@@ -492,8 +656,15 @@ namespace GenshinMusicPlayer
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
                 ProgressBarPlay.Value = 100;
-                ButtonLoadMidiFile.IsEnabled = true;
+            });
+            isPlaying = false;
+
+            STOP_PLAYING:;
+            Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
+            {
+                ButtonStart.Content = "开始演奏";
                 ButtonStart.IsEnabled = true;
+                ButtonLoadMidiFile.IsEnabled = true;
             });
         }
 
@@ -531,67 +702,7 @@ namespace GenshinMusicPlayer
 
         private void ButtonStart_Click(object sender, RoutedEventArgs e)
         {
-            ButtonStart.IsEnabled = false;
-            if (notes == null)
-            {
-                MessageBox.Show("请先加载 MIDI 文件！");
-                ButtonStart.IsEnabled = true;
-                return;
-            }
-            if (ComboBoxInstrument.SelectedIndex == -1)
-            {
-                MessageBox.Show("请选择乐器！");
-                ButtonStart.IsEnabled = true;
-                return;
-            }
-            if (ComboBoxTone.SelectedIndex == -1)
-            {
-                MessageBox.Show("请选择调性！");
-                ButtonStart.IsEnabled = true;
-                return;
-            }
-            if (RadioButtonNoteSemitoneNotAllowed.IsChecked == true)
-            {
-                var result = instrument.CheckNotes(ComboBoxTone.SelectedIndex, notes);
-                if (result.MissedCount > 0)
-                {
-                    MessageBox.Show("有不允许的半音音符存在！");
-                    ButtonStart.IsEnabled = true;
-                    return;
-                }
-            }
-            if (RadioButtonNoteOutOfRangeNotAllowed.IsChecked == true)
-            {
-                var result = instrument.CheckNotes(ComboBoxTone.SelectedIndex, notes);
-                if (result.OutOfRangeCount > 0)
-                {
-                    MessageBox.Show("有不允许的乐器范围外音符存在！");
-                    ButtonStart.IsEnabled = true;
-                    return;
-                }
-            }
-            if (!ulong.TryParse(TextBoxNoteMerging.Text, out ulong parseResult))
-            {
-                MessageBox.Show("音符合并演奏选项不是合法的正整数！");
-                ButtonStart.IsEnabled = true;
-                return;
-            }
-            
-            ButtonLoadMidiFile.IsEnabled = false;
-            WrapPanelHistoryNotes.Children.Clear();
-            ProgressBarPlay.Value = 0;
-
-            tone = ComboBoxTone.SelectedIndex;
-            isHigherFirst = null;
-            if (RadioButtonNoteSemitoneIgnored.IsChecked != true)
-            {
-                isHigherFirst = RadioButtonNoteSemitoneHigher.IsChecked == true;
-            }
-            noteMergingTime = (long)parseResult;
-
-            Thread thread = new Thread(PlayMusic);
-            thread.IsBackground = true;
-            thread.Start();
+            SwitchPlayingStatus();
         }
 
         public MainWindow()
