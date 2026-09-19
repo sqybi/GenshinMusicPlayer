@@ -67,10 +67,21 @@ internal static class MidiFileAnalysisTests
             var result = MidiFileAnalysis.Analyze(normal);
             Check(result.Notes.Count == 1 && result.MinNote.Name == "C5" && result.MaxNote.Name == "C5", "Wrong note analysis.");
             Check(Math.Abs(result.LastNoteOffTime - 500) < 0.001, "Wrong duration.");
+            Check(Math.Abs(result.Notes[0].EndTime - 500) < 0.001, "The note end time was lost.");
             Console.WriteLine("PASS valid MIDI");
 
+            var chord = Read(Midi(new byte[] {
+                0, 0x90, 0x3c, 0x40, 0, 0x90, 0x40, 0x40,
+                0x81, 0x70, 0x80, 0x40, 0, 0x81, 0x70, 0x80, 0x3c, 0,
+                0, 0xff, 0x2f, 0
+            }));
+            var chordNotes = MidiFileAnalysis.Analyze(chord).Notes;
+            Check(Math.Abs(chordNotes[0].EndTime - 500) < 0.001
+                && Math.Abs(chordNotes[1].EndTime - 250) < 0.001,
+                "Simultaneous notes must retain their own end times.");
+
             var instant = Read(Midi(new byte[] { 0, 0x90, 0x3c, 0x40, 0, 0x80, 0x3c, 0, 0, 0xff, 0x2f, 0 }));
-            Check(MidiFileAnalysis.Analyze(instant).LastNoteOffTime == 0, "Zero-duration note should load.");
+            Check(MidiFileAnalysis.Analyze(instant).Notes[0].EndTime == 0, "Zero-duration note should load.");
             Console.WriteLine("PASS zero-duration note");
 
             try { Read(new byte[] { 1, 2, 3 }); }

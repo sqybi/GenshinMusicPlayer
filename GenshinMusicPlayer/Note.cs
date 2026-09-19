@@ -57,6 +57,7 @@ namespace GenshinMusicPlayer
         }
 
         public double Time { get; private set; }
+        public double EndTime { get; private set; }
         public int Number { get; private set; }
         public string Name { get { return GetNoteName(Number); } }
 
@@ -70,16 +71,24 @@ namespace GenshinMusicPlayer
         public Note(Note note)
         {
             Time = note.Time;
+            EndTime = note.EndTime;
             Number = note.Number;
         }
 
-        public Note(double time, int number)
+        public Note(double time, int number) : this(time, time, number) { }
+
+        public Note(double time, double endTime, int number)
         {
             if (number < 0)
             {
                 throw new Exception("Illegal note number");
             }
+            if (endTime < time)
+            {
+                throw new ArgumentOutOfRangeException(nameof(endTime));
+            }
             Time = time;
+            EndTime = endTime;
             Number = number;
         }
     }

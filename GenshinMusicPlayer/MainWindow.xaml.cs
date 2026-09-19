@@ -363,64 +363,139 @@ namespace GenshinMusicPlayer
             var startTime = DateTime.Now;
 
             int noteIdx = 0;
-            while (noteIdx < notes.Count)
+            var heldKeys = new Dictionary<VirtualKeyCode, double>();
+            try
             {
-                target.EnsureForeground(cancellationToken);
-
-                var nextTimeToBePlayed = startTime + TimeSpan.FromMilliseconds(notes[noteIdx].Time);
-
-                // Merge notes
-                int nextNoteIdx = noteIdx + 1;
-                while (nextNoteIdx < notes.Count && notes[nextNoteIdx].Time - notes[noteIdx].Time <= noteMergingTime)
+                while (noteIdx < notes.Count)
                 {
-                    nextNoteIdx++;
-                }
-
-                // Generate keys
-                List<NoteToPlay> notesToPlay = new List<NoteToPlay>();
-                List<VirtualKeyCode> keysToPress = new List<VirtualKeyCode>();
-                for (int i = noteIdx; i < nextNoteIdx; ++i)
-                {
-                    var noteToPlay = instrument.GetKeyCodeFromNote(tone, notes[i], isHigherFirst);
-                    notesToPlay.Add(noteToPlay);
-                    if (noteToPlay.VirtualKeyCodePress.HasValue)
+                    if (instrument.SupportsLongPress)
                     {
-                        keysToPress.Add(noteToPlay.VirtualKeyCodePress.Value);
+                        await ReleaseHeldKeysUntilAsync(target, startTime, notes[noteIdx].Time, heldKeys, cancellationToken).ConfigureAwait(false);
                     }
-                }
-                cancellationToken.ThrowIfCancellationRequested();
+                    target.EnsureForeground(cancellationToken);
 
-                // Wait and press
-                var timeToSleep = nextTimeToBePlayed - DateTime.Now;
-                if (timeToSleep > TimeSpan.FromSeconds(0))
-                {
-                    await target.DelayAsync(timeToSleep, cancellationToken).ConfigureAwait(false);
-                }
-                target.EnsureForeground(cancellationToken);
-                if (keysToPress.Count > 0)
-                {
-                    var keys = keysToPress.ToArray();
-                    target.Send(() => sim.Keyboard.KeyPress(keys), cancellationToken);
+                    var nextTimeToBePlayed = startTime + TimeSpan.FromMilliseconds(notes[noteIdx].Time);
+
+                    // Merge notes
+                    int nextNoteIdx = noteIdx + 1;
+                    while (nextNoteIdx < notes.Count && notes[nextNoteIdx].Time - notes[noteIdx].Time <= noteMergingTime)
+                    {
+                        nextNoteIdx++;
+                    }
+
+                    // Generate keys
+                    List<NoteToPlay> notesToPlay = new List<NoteToPlay>();
+                    List<VirtualKeyCode> keysToPress = new List<VirtualKeyCode>();
+                    var keyEndTimes = new Dictionary<VirtualKeyCode, double>();
+                    for (int i = noteIdx; i < nextNoteIdx; ++i)
+                    {
+                        var noteToPlay = instrument.GetKeyCodeFromNote(tone, notes[i], isHigherFirst);
+                        notesToPlay.Add(noteToPlay);
+                        if (noteToPlay.VirtualKeyCodePress.HasValue)
+                        {
+                            keysToPress.Add(noteToPlay.VirtualKeyCodePress.Value);
+                            double previousEndTime;
+                            if (!keyEndTimes.TryGetValue(noteToPlay.VirtualKeyCodePress.Value, out previousEndTime)
+                                || notes[i].EndTime > previousEndTime)
+                            {
+                                keyEndTimes[noteToPlay.VirtualKeyCodePress.Value] = notes[i].EndTime;
+                            }
+                        }
+                    }
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    // Wait and press
+                    var timeToSleep = nextTimeToBePlayed - DateTime.Now;
+                    if (timeToSleep > TimeSpan.FromSeconds(0))
+                    {
+                        await target.DelayAsync(timeToSleep, cancellationToken).ConfigureAwait(false);
+                    }
+                    target.EnsureForeground(cancellationToken);
+                    if (keysToPress.Count > 0)
+                    {
+                        if (instrument.SupportsLongPress)
+                        {
+                            foreach (var key in keyEndTimes.Keys)
+                            {
+                                if (heldKeys.ContainsKey(key))
+                                {
+                                    target.Send(() => sim.Keyboard.KeyUp(key), cancellationToken);
+                                    heldKeys.Remove(key);
+                                }
+                                if (keyEndTimes[key] > notes[noteIdx].Time)
+                                {
+                                    target.Send(() => sim.Keyboard.KeyDown(key), cancellationToken);
+                                    heldKeys[key] = keyEndTimes[key];
+                                }
+                                else
+                                {
+                                    target.Send(() => sim.Keyboard.KeyPress(key), cancellationToken);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            var keys = keysToPress.ToArray();
+                            target.Send(() => sim.Keyboard.KeyPress(keys), cancellationToken);
+                        }
+                    }
+
+                    // Update UI
+                    Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
+                    {
+                        ProgressBarPlay.Value = maxNoteOffTime > 0
+                            ? (nextTimeToBePlayed - startTime).TotalMilliseconds / maxNoteOffTime * 100
+                            : 0;
+                        TextBoxCurrentNote.Text = notesToPlay.Aggregate("", (text, noteToPlay) => text + " " + noteToPlay.ToString()).Substring(1);
+                        WrapPanelHistoryNotes.Children.Add(new TextBox() { Text = TextBoxCurrentNote.Text, Margin = new Thickness(2, 2, 2, 2) });
+                        ScrollViewerHistoryNotes.ScrollToBottom();
+                    });
+
+                    noteIdx = nextNoteIdx;
                 }
 
-                // Update UI
-                Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
+                if (instrument.SupportsLongPress)
                 {
-                    ProgressBarPlay.Value = maxNoteOffTime > 0
-                        ? (nextTimeToBePlayed - startTime).TotalMilliseconds / maxNoteOffTime * 100
-                        : 0;
-                    TextBoxCurrentNote.Text = notesToPlay.Aggregate("", (text, noteToPlay) => text + " " + noteToPlay.ToString()).Substring(1);
-                    WrapPanelHistoryNotes.Children.Add(new TextBox() { Text = TextBoxCurrentNote.Text, Margin = new Thickness(2, 2, 2, 2) });
-                    ScrollViewerHistoryNotes.ScrollToBottom();
-                });
-
-                noteIdx = nextNoteIdx;
+                    await ReleaseHeldKeysUntilAsync(target, startTime, maxNoteOffTime, heldKeys, cancellationToken).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                // Release keys even when playback is cancelled or the game loses focus.
+                foreach (var key in heldKeys.Keys)
+                {
+                    sim.Keyboard.KeyUp(key);
+                }
             }
 
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
                 ProgressBarPlay.Value = 100;
             });
+        }
+
+        private async Task ReleaseHeldKeysUntilAsync(PlaybackTarget target, DateTime startTime, double untilTime,
+            Dictionary<VirtualKeyCode, double> heldKeys, CancellationToken cancellationToken)
+        {
+            while (heldKeys.Count > 0)
+            {
+                double nextEndTime = heldKeys.Values.Min();
+                if (nextEndTime > untilTime) break;
+
+                var releaseTime = startTime + TimeSpan.FromMilliseconds(nextEndTime);
+                var delay = releaseTime - DateTime.Now;
+                if (delay > TimeSpan.Zero)
+                {
+                    await target.DelayAsync(delay, cancellationToken).ConfigureAwait(false);
+                }
+                var keysToRelease = heldKeys.Where(pair => pair.Value <= nextEndTime)
+                    .Select(pair => pair.Key).ToList();
+                foreach (var key in keysToRelease)
+                {
+                    target.Send(() => sim.Keyboard.KeyUp(key), cancellationToken);
+                    heldKeys.Remove(key);
+                }
+            }
         }
 
         private void ButtonLoadMidiFile_Click(object sender, RoutedEventArgs e)

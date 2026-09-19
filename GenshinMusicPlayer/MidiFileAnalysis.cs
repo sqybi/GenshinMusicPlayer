@@ -62,7 +62,7 @@ namespace GenshinMusicPlayer
                     {
                         throw new InvalidDataException("MIDI 文件中的音符结束时间早于开始时间。");
                     }
-                    var note = new Note(startTime, midiEvent.NoteNumber);
+                    var note = new Note(startTime, stopTime, midiEvent.NoteNumber);
                     result.Notes.Add(note);
                     if (result.MinNote == null || note.Number < result.MinNote.Number) result.MinNote = note;
                     if (result.MaxNote == null || note.Number > result.MaxNote.Number) result.MaxNote = note;

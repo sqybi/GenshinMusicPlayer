@@ -34,9 +34,13 @@ internal static class InstrumentTests
                 "The display name must follow the instrument class name.");
             Check(instrumentNames.Add(listedInstrument.Name),
                 "The instrument list must not contain duplicate names.");
+            Check(listedInstrument.SupportsLongPress == (listedInstrument is 晚风圆号),
+                "The instrument's long-press capability is incorrect.");
         }
 
         IInstrument threeRow = new 风物之诗琴();
+        Check(!threeRow.SupportsLongPress && new 晚风圆号().SupportsLongPress,
+            "Only instruments that sustain notes should request a held key.");
         CheckKey(threeRow, 60, "Z", VirtualKeyCode.VK_Z);
         CheckKey(threeRow, 72, "A", VirtualKeyCode.VK_A);
         CheckKey(threeRow, 84, "Q", VirtualKeyCode.VK_Q);

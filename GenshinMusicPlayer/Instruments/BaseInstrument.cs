@@ -7,6 +7,7 @@ namespace GenshinMusicPlayer
     public abstract class BaseInstrument : IInstrument
     {
         public virtual string Name => GetType().Name;
+        public virtual bool SupportsLongPress => false;
 
         private static readonly VirtualKeyCode[] threeRowKeyCodes = {
             VirtualKeyCode.VK_Z, VirtualKeyCode.VK_X, VirtualKeyCode.VK_C, VirtualKeyCode.VK_V, VirtualKeyCode.VK_B, VirtualKeyCode.VK_N, VirtualKeyCode.VK_M,
