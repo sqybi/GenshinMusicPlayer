@@ -398,7 +398,7 @@ namespace GenshinMusicPlayer
             if (!quarterNoteTime.HasValue)
             {
                 MessageBox.Show("MIDI 文件中未找到速度标识，会使用默认速度 120 bpm。");
-                quarterNoteTime = 120;
+                quarterNoteTime = 60.0 / 120.0;
             }
 
             notes = new List<Note>();
