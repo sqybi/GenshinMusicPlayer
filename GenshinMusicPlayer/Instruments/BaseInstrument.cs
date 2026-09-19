@@ -6,6 +6,8 @@ namespace GenshinMusicPlayer
 {
     public abstract class BaseInstrument : IInstrument
     {
+        public virtual string Name => GetType().Name;
+
         private static readonly VirtualKeyCode[] threeRowKeyCodes = {
             VirtualKeyCode.VK_Z, VirtualKeyCode.VK_X, VirtualKeyCode.VK_C, VirtualKeyCode.VK_V, VirtualKeyCode.VK_B, VirtualKeyCode.VK_N, VirtualKeyCode.VK_M,
             VirtualKeyCode.VK_A, VirtualKeyCode.VK_S, VirtualKeyCode.VK_D, VirtualKeyCode.VK_F, VirtualKeyCode.VK_G, VirtualKeyCode.VK_H, VirtualKeyCode.VK_J,
@@ -25,10 +27,10 @@ namespace GenshinMusicPlayer
             "Q", "W", "E", "R", "T", "Y", "U",
         };
 
-        // Note numbers are absolute pitches used to describe the layout. The first pitch
-        // corresponds to the lowest note selected in the UI.
+        // Note numbers follow keyboard order. The lowest pitch corresponds to the
+        // lowest note selected in the UI; rows need not be in pitch order.
         protected abstract int[] NoteNumbers { get; }
-        protected virtual bool IsTwoRow => false;
+        protected abstract bool IsTwoRow { get; }
 
         private int[] GetValidatedNoteNumbers()
         {
@@ -38,35 +40,24 @@ namespace GenshinMusicPlayer
             {
                 throw new InvalidOperationException("The number of notes must match the instrument's keys.");
             }
-            for (int i = 1; i < numbers.Length; i++)
+            var uniqueNumbers = new HashSet<int>();
+            foreach (int number in numbers)
             {
-                if (numbers[i] <= numbers[i - 1])
+                if (!uniqueNumbers.Add(number))
                 {
-                    throw new InvalidOperationException("Instrument notes must be in ascending order.");
+                    throw new InvalidOperationException("Instrument notes must be unique.");
                 }
             }
             return numbers;
         }
 
-        protected int BinarySearch(int[] data, int value)
+        private static int FindNotePosition(int[] data, int value)
         {
-            int left = 0;
-            int right = data.Length;
-            // Loop: find in [left, right)
-            while (left < right)
+            for (int i = 0; i < data.Length; i++)
             {
-                int mid = (left + right) / 2;
-                if (value == data[mid])
+                if (value == data[i])
                 {
-                    return mid;
-                }
-                else if (value > data[mid])
-                {
-                    left = mid + 1;
-                }
-                else
-                {
-                    right = mid;
+                    return i;
                 }
             }
             return -1;
@@ -75,9 +66,15 @@ namespace GenshinMusicPlayer
         InstrumentCheckNotesResult IInstrument.CheckNotes(int baseNoteNumber, List<Note> notes)
         {
             int[] noteNumbers = GetValidatedNoteNumbers();
-            int lowestNoteNumber = noteNumbers[0];
+            int lowestNoteNumber = int.MaxValue;
+            int highestNoteNumber = int.MinValue;
+            foreach (int number in noteNumbers)
+            {
+                lowestNoteNumber = Math.Min(lowestNoteNumber, number);
+                highestNoteNumber = Math.Max(highestNoteNumber, number);
+            }
             int minNoteNumber = baseNoteNumber - 1;
-            int maxNoteNumber = noteNumbers[noteNumbers.Length - 1] - lowestNoteNumber + baseNoteNumber + 1;
+            int maxNoteNumber = highestNoteNumber - lowestNoteNumber + baseNoteNumber + 1;
             HashSet<int> availableNotes = new HashSet<int>();
             foreach (var noteNumber in noteNumbers)
             {
@@ -104,9 +101,14 @@ namespace GenshinMusicPlayer
             int[] noteNumbers = GetValidatedNoteNumbers();
             VirtualKeyCode[] keyCodes = IsTwoRow ? twoRowKeyCodes : threeRowKeyCodes;
             string[] keyNames = IsTwoRow ? twoRowKeyNames : threeRowKeyNames;
-            int noteNumber = note.Number - baseNoteNumber + noteNumbers[0];
+            int lowestNoteNumber = int.MaxValue;
+            foreach (int number in noteNumbers)
+            {
+                lowestNoteNumber = Math.Min(lowestNoteNumber, number);
+            }
+            int noteNumber = note.Number - baseNoteNumber + lowestNoteNumber;
 
-            int pos = BinarySearch(noteNumbers, noteNumber);
+            int pos = FindNotePosition(noteNumbers, noteNumber);
             if (pos != -1)
             {
                 return new NoteToPlay(note, null, keyNames[pos], keyCodes[pos]);
@@ -125,7 +127,7 @@ namespace GenshinMusicPlayer
                     noteNumber--;
                     modifier = false;
                 }
-                pos = BinarySearch(noteNumbers, noteNumber);
+                pos = FindNotePosition(noteNumbers, noteNumber);
                 if (pos != -1)
                 {
                     return new NoteToPlay(note, modifier, keyNames[pos], keyCodes[pos]);
@@ -141,7 +143,7 @@ namespace GenshinMusicPlayer
                     noteNumber += 2;
                     modifier = true;
                 }
-                pos = BinarySearch(noteNumbers, noteNumber);
+                pos = FindNotePosition(noteNumbers, noteNumber);
                 if (pos != -1)
                 {
                     return new NoteToPlay(note, modifier, keyNames[pos], keyCodes[pos]);

@@ -230,7 +230,7 @@ namespace GenshinMusicPlayer
                     ButtonStart.IsEnabled = true;
                     return;
                 }
-                if (ComboBoxInstrument.SelectedIndex == -1)
+                if (instrument == null)
                 {
                     MessageBox.Show("请选择乐器！");
                     ButtonStart.IsEnabled = true;
@@ -444,22 +444,7 @@ namespace GenshinMusicPlayer
 
         private void ComboBoxInstrument_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var instrumentSelection = ComboBoxInstrument.SelectedIndex;
-            switch (instrumentSelection)
-            {
-                case 0:
-                    instrument = new 风物之诗琴();
-                    break;
-                case 1:
-                    instrument = new 镜花之琴();
-                    break;
-                case 2:
-                    instrument = new 老旧的诗琴();
-                    break;
-                default:
-                    instrument = null;
-                    break;
-            }
+            instrument = ComboBoxInstrument.SelectedItem as IInstrument;
             UpdateComboBoxTone();
         }
 
@@ -481,6 +466,8 @@ namespace GenshinMusicPlayer
             }
 
             ListViewFileProperties.ItemsSource = midiFileProperties;
+            ComboBoxInstrument.ItemsSource = InstrumentCatalog.All;
+            ComboBoxInstrument.SelectedIndex = 0;
         }
     }
 }

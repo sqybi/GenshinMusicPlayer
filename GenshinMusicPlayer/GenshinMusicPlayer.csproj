@@ -111,6 +111,15 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Instruments\BaseThreeRowsGuitarInstrument.cs" />
+    <Compile Include="Instruments\InstrumentCatalog.cs" />
+    <Compile Include="Instruments\BaseTwoRowsKeyboardInstrument.cs" />
+    <Compile Include="Instruments\余音.cs" />
+    <Compile Include="Instruments\悠可琴.cs" />
+    <Compile Include="Instruments\沃雅妮莎.cs" />
+    <Compile Include="Instruments\晚风圆号.cs" />
+    <Compile Include="Instruments\BaseThreeRowsKeyboardInstrument.cs" />
+    <Compile Include="Instruments\跃律琴.cs" />
     <Compile Include="MainWindow.xaml.cs">
       <DependentUpon>MainWindow.xaml</DependentUpon>
       <SubType>Code</SubType>

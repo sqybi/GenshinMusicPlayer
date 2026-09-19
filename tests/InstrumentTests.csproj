@@ -15,11 +15,20 @@
     <Compile Include="..\GenshinMusicPlayer\Note.cs"><Link>Note.cs</Link></Compile>
     <Compile Include="..\GenshinMusicPlayer\Instruments\IInstrument.cs"><Link>IInstrument.cs</Link></Compile>
     <Compile Include="..\GenshinMusicPlayer\Instruments\BaseInstrument.cs"><Link>BaseInstrument.cs</Link></Compile>
+    <Compile Include="..\GenshinMusicPlayer\Instruments\BaseThreeRowsKeyboardInstrument.cs"><Link>BaseThreeRowsKeyboardInstrument.cs</Link></Compile>
+    <Compile Include="..\GenshinMusicPlayer\Instruments\BaseTwoRowsKeyboardInstrument.cs"><Link>BaseTwoRowsKeyboardInstrument.cs</Link></Compile>
+    <Compile Include="..\GenshinMusicPlayer\Instruments\BaseThreeRowsGuitarInstrument.cs"><Link>BaseThreeRowsGuitarInstrument.cs</Link></Compile>
+    <Compile Include="..\GenshinMusicPlayer\Instruments\InstrumentCatalog.cs"><Link>InstrumentCatalog.cs</Link></Compile>
     <Compile Include="..\GenshinMusicPlayer\Instruments\InstrumentCheckNotesResult.cs"><Link>InstrumentCheckNotesResult.cs</Link></Compile>
     <Compile Include="..\GenshinMusicPlayer\Instruments\NoteToPlay.cs"><Link>NoteToPlay.cs</Link></Compile>
     <Compile Include="..\GenshinMusicPlayer\Instruments\风物之诗琴.cs"><Link>风物之诗琴.cs</Link></Compile>
     <Compile Include="..\GenshinMusicPlayer\Instruments\镜花之琴.cs"><Link>镜花之琴.cs</Link></Compile>
     <Compile Include="..\GenshinMusicPlayer\Instruments\老旧的诗琴.cs"><Link>老旧的诗琴.cs</Link></Compile>
+    <Compile Include="..\GenshinMusicPlayer\Instruments\跃律琴.cs"><Link>跃律琴.cs</Link></Compile>
+    <Compile Include="..\GenshinMusicPlayer\Instruments\晚风圆号.cs"><Link>晚风圆号.cs</Link></Compile>
+    <Compile Include="..\GenshinMusicPlayer\Instruments\沃雅妮莎.cs"><Link>沃雅妮莎.cs</Link></Compile>
+    <Compile Include="..\GenshinMusicPlayer\Instruments\悠可琴.cs"><Link>悠可琴.cs</Link></Compile>
+    <Compile Include="..\GenshinMusicPlayer\Instruments\余音.cs"><Link>余音.cs</Link></Compile>
     <Compile Include="InstrumentTests.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

@@ -45,11 +45,7 @@
             <TextBlock HorizontalAlignment="Center" FontSize="20" Margin="10,10,10,0">纠错和播放选项</TextBlock>
             <Separator Margin="10,10,10,0"/>
             <TextBlock Margin="10,10,10,0">乐器：</TextBlock>
-            <ComboBox x:Name="ComboBoxInstrument" Margin="10,5,10,0" SelectionChanged="ComboBoxInstrument_SelectionChanged">
-                <ComboBoxItem IsSelected="True">风物之诗琴</ComboBoxItem>
-                <ComboBoxItem>镜花之琴</ComboBoxItem>
-                <ComboBoxItem>老旧的诗琴</ComboBoxItem>
-            </ComboBox>
+            <ComboBox x:Name="ComboBoxInstrument" Margin="10,5,10,0" DisplayMemberPath="Name" SelectionChanged="ComboBoxInstrument_SelectionChanged"/>
             <TextBlock Margin="10,10,10,0">调性（乐器最低音）：</TextBlock>
             <ComboBox x:Name="ComboBoxTone" Margin="10,5,10,0"/>
             <TextBlock Margin="10,10,10,0">半音音符默认处理方式：</TextBlock>

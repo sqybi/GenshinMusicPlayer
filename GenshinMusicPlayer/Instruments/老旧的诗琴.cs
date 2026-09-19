@@ -1,6 +1,6 @@
 namespace GenshinMusicPlayer
 {
-    public class 老旧的诗琴 : BaseInstrument, IInstrument
+    public class 老旧的诗琴 : BaseThreeRowsKeyboardInstrument, IInstrument
     {
         protected override int[] NoteNumbers { get; } = Note.GetNoteNumbers(
             "C3", "D3", "D#3", "F3", "G3", "A3", "A#3",
