@@ -115,6 +115,13 @@
       <DependentUpon>MainWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Instruments\BaseInstrument.cs" />
+    <Compile Include="Instruments\IInstrument.cs" />
+    <Compile Include="Instruments\InstrumentCheckNotesResult.cs" />
+    <Compile Include="Instruments\NoteToPlay.cs" />
+    <Compile Include="Instruments\风物之诗琴.cs" />
+    <Compile Include="Instruments\镜花之琴.cs" />
+    <Compile Include="Instruments\老旧的诗琴.cs" />
     <Compile Include="MidiFileAnalysis.cs" />
     <Compile Include="Note.cs" />
     <Compile Include="PlaybackTarget.cs" />
