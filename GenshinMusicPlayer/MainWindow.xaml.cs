@@ -3,7 +3,6 @@ using NAudio.Midi;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
@@ -297,9 +296,6 @@ namespace GenshinMusicPlayer
         private CancellationTokenSource playbackCancellation;
         private bool isWindowClosed;
 
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        private static extern bool SwitchToThisWindow(IntPtr hWnd, bool fAltTab);
-
         [DllImport("User32.dll")]
         public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
 
@@ -562,9 +558,17 @@ namespace GenshinMusicPlayer
                 {
                     // A requested stop is normal completion of this session.
                 }
+                catch (PlaybackTargetException ex)
+                {
+                    if (!isWindowClosed) TextBoxCurrentNote.Text = "演奏已停止：" + ex.Message;
+                }
                 catch (Exception ex)
                 {
-                    if (!isWindowClosed) MessageBox.Show("演奏失败：" + ex.Message);
+                    if (!isWindowClosed)
+                    {
+                        TextBoxCurrentNote.Text = "演奏已停止：" + ex.Message;
+                        MessageBox.Show("演奏失败：" + ex.Message);
+                    }
                 }
                 finally
                 {
@@ -599,33 +603,23 @@ namespace GenshinMusicPlayer
             {
                 TextBoxCurrentNote.Text = "正在将原神窗口切换到前台……";
             });
-            foreach (var process in Process.GetProcesses())
-            {
-                if (process.ProcessName == "YuanShen")
-                {
-                    SwitchToThisWindow(process.MainWindowHandle, true);
-                    break;
-                }
-            }
-            cancellationToken.ThrowIfCancellationRequested();
+            var target = PlaybackTarget.FindGameWindow();
+            await target.ActivateAsync(cancellationToken).ConfigureAwait(false);
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
                 TextBoxCurrentNote.Text = "3 秒后开始……";
             });
-            await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
+            await target.DelayAsync(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
                 TextBoxCurrentNote.Text = "2 秒后开始……";
             });
-            await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
+            await target.DelayAsync(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
                 TextBoxCurrentNote.Text = "1 秒后开始……";
             });
-            await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
+            await target.DelayAsync(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
                 TextBoxCurrentNote.Text = "";
@@ -636,7 +630,7 @@ namespace GenshinMusicPlayer
             int noteIdx = 0;
             while (noteIdx < notes.Count)
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                target.EnsureForeground(cancellationToken);
 
                 var nextTimeToBePlayed = startTime + TimeSpan.FromMilliseconds(notes[noteIdx].Time);
 
@@ -665,12 +659,13 @@ namespace GenshinMusicPlayer
                 var timeToSleep = nextTimeToBePlayed - DateTime.Now;
                 if (timeToSleep > TimeSpan.FromSeconds(0))
                 {
-                    await Task.Delay(timeToSleep, cancellationToken).ConfigureAwait(false);
+                    await target.DelayAsync(timeToSleep, cancellationToken).ConfigureAwait(false);
                 }
-                cancellationToken.ThrowIfCancellationRequested();
+                target.EnsureForeground(cancellationToken);
                 if (keysToPress.Count > 0)
                 {
-                    sim.Keyboard.KeyPress(keysToPress.ToArray());
+                    var keys = keysToPress.ToArray();
+                    target.Send(() => sim.Keyboard.KeyPress(keys), cancellationToken);
                 }
 
                 // Update UI
