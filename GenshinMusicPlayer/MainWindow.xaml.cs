@@ -400,6 +400,14 @@ namespace GenshinMusicPlayer
             }
         }
 
+        private void SetConfigurationEnabled(bool enabled)
+        {
+            PanelMidiFile.IsEnabled = enabled;
+            PanelPlaybackOptions.IsEnabled = enabled;
+            SplitterMidiFile.IsEnabled = enabled;
+            SplitterPlaybackOptions.IsEnabled = enabled;
+        }
+
         private async void SwitchPlayingStatus()
         {
             if (isWindowClosed) return;
@@ -453,9 +461,6 @@ namespace GenshinMusicPlayer
                     return;
                 }
 
-                // Disable load button here to avoid that we need to enable it again and again at the returns above.
-                ButtonLoadMidiFile.IsEnabled = false;
-
                 WrapPanelHistoryNotes.Children.Clear();
                 ProgressBarPlay.Value = 0;
 
@@ -469,6 +474,7 @@ namespace GenshinMusicPlayer
 
                 var cancellation = new CancellationTokenSource();
                 playbackCancellation = cancellation;
+                SetConfigurationEnabled(false);
                 ButtonStart.Content = "停止演奏";
                 ButtonStart.IsEnabled = true;
                 try
@@ -499,7 +505,7 @@ namespace GenshinMusicPlayer
                     {
                         ButtonStart.Content = "开始演奏";
                         ButtonStart.IsEnabled = true;
-                        ButtonLoadMidiFile.IsEnabled = true;
+                        SetConfigurationEnabled(true);
                     }
                 }
             }
@@ -611,11 +617,19 @@ namespace GenshinMusicPlayer
 
         private void ButtonLoadMidiFile_Click(object sender, RoutedEventArgs e)
         {
+            if (playbackCancellation != null) return;
+
             OpenFileDialog openMidiFileDialog = new OpenFileDialog();
             openMidiFileDialog.Filter = "MIDI 文件 (*.mid;*.midi)|*.mid;*.midi";
-            if (openMidiFileDialog.ShowDialog() == true)
+            var selectedFile = openMidiFileDialog.ShowDialog() == true
+                ? openMidiFileDialog.FileName
+                : null;
+            // A global hotkey can start playback while the file dialog is open.
+            if (playbackCancellation != null) return;
+
+            if (selectedFile != null)
             {
-                LoadMidiFile(openMidiFileDialog.FileName);
+                LoadMidiFile(selectedFile);
             }
             UpdateComboBoxTone();
         }
