@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" />
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <OutputPath>bin\Debug\</OutputPath>
+    <AssemblyName>PlaybackTargetTests</AssemblyName>
+    <TargetFrameworkProfile />
+    <ProjectGuid>{43BB7E5C-2673-454F-92CB-62E512EBD350}</ProjectGuid>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Compile Include="..\GenshinMusicPlayer\PlaybackTarget.cs">
+      <Link>PlaybackTarget.cs</Link>
+    </Compile>
+    <Compile Include="PlaybackTargetTests.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="app.config" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

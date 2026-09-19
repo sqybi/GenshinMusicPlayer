@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" />
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <OutputPath>bin\Debug\</OutputPath>
+    <AssemblyName>InstrumentTests</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="WindowsInput">
+      <HintPath>..\packages\InputSimulatorPlus.1.0.7\lib\net20\WindowsInput.dll</HintPath>
+    </Reference>
+    <Compile Include="..\GenshinMusicPlayer\Note.cs"><Link>Note.cs</Link></Compile>
+    <Compile Include="..\GenshinMusicPlayer\Instruments\IInstrument.cs"><Link>IInstrument.cs</Link></Compile>
+    <Compile Include="..\GenshinMusicPlayer\Instruments\BaseInstrument.cs"><Link>BaseInstrument.cs</Link></Compile>
+    <Compile Include="..\GenshinMusicPlayer\Instruments\InstrumentCheckNotesResult.cs"><Link>InstrumentCheckNotesResult.cs</Link></Compile>
+    <Compile Include="..\GenshinMusicPlayer\Instruments\NoteToPlay.cs"><Link>NoteToPlay.cs</Link></Compile>
+    <Compile Include="..\GenshinMusicPlayer\Instruments\风物之诗琴.cs"><Link>风物之诗琴.cs</Link></Compile>
+    <Compile Include="..\GenshinMusicPlayer\Instruments\镜花之琴.cs"><Link>镜花之琴.cs</Link></Compile>
+    <Compile Include="..\GenshinMusicPlayer\Instruments\老旧的诗琴.cs"><Link>老旧的诗琴.cs</Link></Compile>
+    <Compile Include="InstrumentTests.cs" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

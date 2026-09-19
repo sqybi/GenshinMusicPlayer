@@ -5,6 +5,14 @@ VisualStudioVersion = 15.0.27703.2026
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenshinMusicPlayer", "GenshinMusicPlayer\GenshinMusicPlayer.csproj", "{F0B97C1F-EFBF-4728-A528-679365193CD5}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PlaybackTargetTests", "tests\PlaybackTargetTests.csproj", "{43BB7E5C-2673-454F-92CB-62E512EBD350}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MidiFileAnalysisTests", "tests\MidiFileAnalysisTests.csproj", "{6E2004E2-CD03-4373-A419-135ADEF04BF2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InstrumentTests", "tests\InstrumentTests.csproj", "{82A13010-2CD5-4D50-BA3C-72B114330AC5}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,9 +23,26 @@ Global
 		{F0B97C1F-EFBF-4728-A528-679365193CD5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F0B97C1F-EFBF-4728-A528-679365193CD5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F0B97C1F-EFBF-4728-A528-679365193CD5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{43BB7E5C-2673-454F-92CB-62E512EBD350}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{43BB7E5C-2673-454F-92CB-62E512EBD350}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{43BB7E5C-2673-454F-92CB-62E512EBD350}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{43BB7E5C-2673-454F-92CB-62E512EBD350}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6E2004E2-CD03-4373-A419-135ADEF04BF2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6E2004E2-CD03-4373-A419-135ADEF04BF2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6E2004E2-CD03-4373-A419-135ADEF04BF2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6E2004E2-CD03-4373-A419-135ADEF04BF2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{82A13010-2CD5-4D50-BA3C-72B114330AC5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{82A13010-2CD5-4D50-BA3C-72B114330AC5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{82A13010-2CD5-4D50-BA3C-72B114330AC5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{82A13010-2CD5-4D50-BA3C-72B114330AC5}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{43BB7E5C-2673-454F-92CB-62E512EBD350} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{6E2004E2-CD03-4373-A419-135ADEF04BF2} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{82A13010-2CD5-4D50-BA3C-72B114330AC5} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {A0398431-4EC2-4B4A-ACEE-96EAFE5D5505}

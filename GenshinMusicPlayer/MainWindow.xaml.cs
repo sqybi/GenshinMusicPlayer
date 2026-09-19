@@ -3,12 +3,11 @@ using NAudio.Midi;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
-using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
@@ -32,246 +31,6 @@ namespace GenshinMusicPlayer
         }
     }
 
-    public class Note : IComparable
-    {
-        private static string[] convertNoteNumberToName = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
-        public static string GetNoteName(int noteNumber)
-        {
-            return convertNoteNumberToName[noteNumber % 12] + (noteNumber / 12).ToString();
-        }
-
-        public double Time { get; private set; }
-        public int Number { get; private set; }
-        public string Name
-        {
-            get
-            {
-                return GetNoteName(Number);
-            }
-        }
-
-        int IComparable.CompareTo(object obj)
-        {
-            Note note = (Note)obj;
-            var compareTime = Time.CompareTo(note.Time);
-            if (compareTime == 0)
-            {
-                return Number.CompareTo(note.Number);
-            }
-            else
-            {
-                return compareTime;
-            }
-        }
-
-        public Note(Note note)
-        {
-            Time = note.Time;
-            Number = note.Number;
-        }
-
-        public Note(double time, int number)
-        {
-            if (number < 0)
-            {
-                throw new Exception("Illegal note number");
-            }
-            Time = time;
-            Number = number;
-        }
-    }
-
-    public class NoteToPlay : Note
-    {
-        // Modifcation:
-        // Null means no modification; true means semitone higher than original note; false means semitone lower than original note.
-        // If no key pressed, KeyboardPress will be "" and VirtualKeyCode will be null. Modification does not mean anything at this time.
-        public bool? Modification { get; private set; }
-        // KeyboardPress: the key name on keyboard pressed (without modifier).
-        public string KeyboardPress { get; private set; }
-        // VirtualKeyCodePress: the virtual key code corresponding to the key pressed (without modifier).
-        public VirtualKeyCode? VirtualKeyCodePress { get; private set; }
-
-        public NoteToPlay(Note note, bool? modification, string keyboardPress, VirtualKeyCode? virtualKeyCodePress) : base(note)
-        {
-            Modification = modification;
-            KeyboardPress = keyboardPress;
-            VirtualKeyCodePress = virtualKeyCodePress;
-        }
-
-        public NoteToPlay(double time, int number, bool? modification, string keyboardPress, VirtualKeyCode? virtualKeyCodePress) : base(time, number)
-        {
-            Modification = modification;
-            KeyboardPress = keyboardPress;
-            VirtualKeyCodePress = virtualKeyCodePress;
-        }
-
-        public override string ToString() {
-            StringBuilder sb = new StringBuilder();
-            if (!VirtualKeyCodePress.HasValue)
-            {
-                sb.Append("(");
-            }
-            sb.Append(Name);
-            if (Modification.HasValue)
-            {
-                sb.Append(Modification.Value ? "↗" : "↘");
-            }
-            if (!VirtualKeyCodePress.HasValue)
-            {
-                sb.Append(")");
-            }
-            return sb.ToString();
-        }
-    }
-
-    #endregion
-    
-    #region Instruments
-
-    public class InstrumentCheckNotesResult
-    {
-        public int MissedCount { get; set; }
-        public int OutOfRangeCount { get; set; }
-    }
-
-    public interface IInstrument
-    {
-        InstrumentCheckNotesResult CheckNotes(int baseNoteNumber, List<Note> notes);
-        NoteToPlay GetKeyCodeFromNote(int baseNoteNumber, Note note, bool? isHigherFirst);
-    }
-
-    public abstract class BaseInstrument : IInstrument
-    {
-        protected readonly VirtualKeyCode[] keyCodes = {
-            VirtualKeyCode.VK_Z, VirtualKeyCode.VK_X, VirtualKeyCode.VK_C, VirtualKeyCode.VK_V, VirtualKeyCode.VK_B, VirtualKeyCode.VK_N, VirtualKeyCode.VK_M,
-            VirtualKeyCode.VK_A, VirtualKeyCode.VK_S, VirtualKeyCode.VK_D, VirtualKeyCode.VK_F, VirtualKeyCode.VK_G, VirtualKeyCode.VK_H, VirtualKeyCode.VK_J,
-            VirtualKeyCode.VK_Q, VirtualKeyCode.VK_W, VirtualKeyCode.VK_E, VirtualKeyCode.VK_R, VirtualKeyCode.VK_T, VirtualKeyCode.VK_Y, VirtualKeyCode.VK_U
-        };
-        protected readonly string[] keyNames = {
-            "Z", "X", "C", "V", "B", "N", "M",
-            "A", "S", "D", "F", "G", "H", "J",
-            "Q", "W", "E", "R", "T", "Y", "U",
-        };
-        protected abstract int[] noteNumbers { get; }
-
-        protected int BinarySearch(int[] data, int value)
-        {
-            int left = 0;
-            int right = data.Length;
-            // Loop: find in [left, right)
-            while (left < right)
-            {
-                int mid = (left + right) / 2;
-                if (value == data[mid])
-                {
-                    return mid;
-                }
-                else if (value > data[mid])
-                {
-                    left = mid + 1;
-                }
-                else
-                {
-                    right = mid;
-                }
-            }
-            return -1;
-        }
-        
-        InstrumentCheckNotesResult IInstrument.CheckNotes(int baseNoteNumber, List<Note> notes)
-        {
-            int minNoteNumber = noteNumbers[0] + baseNoteNumber - 1;
-            int maxNoteNumber = noteNumbers[noteNumbers.Length - 1] + baseNoteNumber + 1;
-            HashSet<int> availableNotes = new HashSet<int>();
-            foreach (var noteNumber in noteNumbers)
-            {
-                availableNotes.Add(noteNumber + baseNoteNumber);
-            }
-
-            InstrumentCheckNotesResult result = new InstrumentCheckNotesResult();
-            foreach (var note in notes)
-            {
-                if (note.Number < minNoteNumber || note.Number > maxNoteNumber)
-                {
-                    result.OutOfRangeCount++;
-                }
-                else if (!availableNotes.Contains(note.Number))
-                {
-                    result.MissedCount++;
-                }
-            }
-            return result;
-        }
-
-        NoteToPlay IInstrument.GetKeyCodeFromNote(int baseNoteNumber, Note note, bool? isHigherFirst)
-        {
-            int noteNumber = note.Number - baseNoteNumber;
-
-            int pos = BinarySearch(noteNumbers, noteNumber);
-            if (pos != -1)
-            {
-                return new NoteToPlay(note, null, keyNames[pos], keyCodes[pos]);
-            }
-
-            if (isHigherFirst.HasValue)
-            {
-                bool modifier;
-                if (isHigherFirst.Value)
-                {
-                    noteNumber++;
-                    modifier = true;
-                }
-                else
-                {
-                    noteNumber--;
-                    modifier = false;
-                }
-                pos = BinarySearch(noteNumbers, noteNumber);
-                if (pos != -1)
-                {
-                    return new NoteToPlay(note, modifier, keyNames[pos], keyCodes[pos]);
-                }
-
-                if (isHigherFirst.Value)
-                {
-                    noteNumber -= 2;
-                    modifier = false;
-                }
-                else
-                {
-                    noteNumber += 2;
-                    modifier = true;
-                }
-                pos = BinarySearch(noteNumbers, noteNumber);
-                if (pos != -1)
-                {
-                    return new NoteToPlay(note, modifier, keyNames[pos], keyCodes[pos]);
-                }
-            }
-
-            return new NoteToPlay(note, null, "", null);
-        }
-    }
-
-    public class 风物之诗琴 : BaseInstrument, IInstrument
-    {
-        protected override int[] noteNumbers
-        {
-            get { return new int[] { 0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24, 26, 28, 29, 31, 33, 35 }; }
-        }
-    }
-
-    public class 镜花之琴 : 风物之诗琴, IInstrument { }
-
-    public class 老旧的诗琴 : BaseInstrument, IInstrument
-    {
-        protected override int[] noteNumbers
-        {
-            get { return new int[] { 0, 2, 3, 5, 7, 9, 10, 12, 14, 15, 17, 19, 21, 22, 24, 25, 27, 29, 31, 32, 34 }; }
-        }
-    }
-
     #endregion
 
     /// <summary>
@@ -292,10 +51,9 @@ namespace GenshinMusicPlayer
         private bool? isHigherFirst;  // Null means ignore; true means higher semitone first; false means lower first.
         private long noteMergingTime;
 
-        private bool isPlaying = false;
-
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        private static extern bool SwitchToThisWindow(IntPtr hWnd, bool fAltTab);
+        // Accessed only on the UI thread; keep the session until its worker has exited.
+        private CancellationTokenSource playbackCancellation;
+        private bool isWindowClosed;
 
         [DllImport("User32.dll")]
         public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -322,6 +80,8 @@ namespace GenshinMusicPlayer
 
         protected override void OnClosed(EventArgs e)
         {
+            isWindowClosed = true;
+            playbackCancellation?.Cancel();
             hwndSource.RemoveHook(HwndHook);
             hwndSource = null;
             UnregisterHotKey();
@@ -369,73 +129,43 @@ namespace GenshinMusicPlayer
 
         private void LoadMidiFileInfo(MidiFile file)
         {
-            Note minNote = null;
-            Note maxNote = null;
-            maxNoteOffTime = 0;
-
-            // Load File
-            double? quarterNoteTime = null;
-            bool errorFlag = false;
-            for (int track = 0; track < file.Tracks; track++)
-            {
-                foreach (var midiEvent in file.Events[track].OfType<TempoEvent>())
-                {
-                    if (!quarterNoteTime.HasValue)
-                    {
-                        quarterNoteTime = 60.0 / midiEvent.Tempo;
-                    }
-                    else
-                    {
-                        errorFlag = true;
-                    }
-                }
-            }
-            if (errorFlag)
-            {
-                MessageBox.Show(String.Format("MIDI 文件包含多于一个的速度标识，暂时不支持，会使用第一个速度 {0:F1} bpm。", quarterNoteTime));
-            }
-            if (!quarterNoteTime.HasValue)
-            {
-                MessageBox.Show("MIDI 文件中未找到速度标识，会使用默认速度 120 bpm。");
-                quarterNoteTime = 120;
-            }
-
-            notes = new List<Note>();
-            for (int track = 0; track < file.Tracks; track++)
-            {
-                foreach (var midiEvent in file.Events[track].OfType<NoteOnEvent>())
-                {
-                    if (MidiEvent.IsNoteOn(midiEvent))
-                    {
-                        double startTime = (double)midiEvent.AbsoluteTime / file.DeltaTicksPerQuarterNote * quarterNoteTime.Value * 1000;
-                        double stopTime = (double)midiEvent.OffEvent.AbsoluteTime / file.DeltaTicksPerQuarterNote * quarterNoteTime.Value * 1000;
-                        var currentNote = new Note(startTime, midiEvent.NoteNumber);
-                        notes.Add(currentNote);
-                        if (minNote == null || currentNote.Number < minNote.Number) minNote = currentNote;
-                        if (maxNote == null || currentNote.Number > maxNote.Number) maxNote = currentNote;
-                        if (stopTime > maxNoteOffTime) maxNoteOffTime = stopTime;
-                    }
-                }
-            }
-            notes.Sort();
+            var analysis = MidiFileAnalysis.Analyze(file);
 
             // Read file properties
+            notes = analysis.Notes;
+            maxNoteOffTime = analysis.LastNoteOffTime;
             midiFileProperties.Clear();
             midiFileProperties.Add(new MidiFileProperty() { Name = "总音符数量", Value = notes.Count.ToString() });
-            midiFileProperties.Add(new MidiFileProperty() { Name = "最低音符", Value = minNote.Name });
-            midiFileProperties.Add(new MidiFileProperty() { Name = "最高音符", Value = maxNote.Name });
+            midiFileProperties.Add(new MidiFileProperty() { Name = "最低音符", Value = analysis.MinNote.Name });
+            midiFileProperties.Add(new MidiFileProperty() { Name = "最高音符", Value = analysis.MaxNote.Name });
             midiFileProperties.Add(new MidiFileProperty() { Name = "文件时长", Value = string.Format("{0:F3} 秒", maxNoteOffTime / 1000.0) });
             ListViewFileProperties.ItemsSource = midiFileProperties;
+            if (analysis.HasMultipleTempos)
+            {
+                MessageBox.Show(String.Format("MIDI 文件包含多于一个的速度标识，暂时不支持，会使用第一个速度 {0:F1} bpm。", analysis.FirstTempo));
+            }
+            if (!analysis.HasTempo)
+            {
+                MessageBox.Show("MIDI 文件中未找到速度标识，会使用默认速度 120 bpm。");
+            }
         }
 
         private void LoadMidiFile(string fileName)
         {
             if (fileName != "")
             {
-                midiFile = new MidiFile(fileName);
-                LoadMidiFileInfo(midiFile);
-                midiFilePath = fileName;
-                TextBoxCurrentFileName.Text = midiFilePath;
+                try
+                {
+                    var loadedFile = new MidiFile(fileName);
+                    LoadMidiFileInfo(loadedFile);
+                    midiFile = loadedFile;
+                    midiFilePath = fileName;
+                    TextBoxCurrentFileName.Text = midiFilePath;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("无法加载 MIDI 文件：" + ex.Message);
+                }
             }
             else
             {
@@ -478,9 +208,19 @@ namespace GenshinMusicPlayer
             }
         }
 
-        private void SwitchPlayingStatus()
+        private void SetConfigurationEnabled(bool enabled)
         {
-            if (!isPlaying)
+            PanelMidiFile.IsEnabled = enabled;
+            PanelPlaybackOptions.IsEnabled = enabled;
+            SplitterMidiFile.IsEnabled = enabled;
+            SplitterPlaybackOptions.IsEnabled = enabled;
+        }
+
+        private async void SwitchPlayingStatus()
+        {
+            if (isWindowClosed) return;
+
+            if (playbackCancellation == null)
             {
                 ButtonStart.IsEnabled = false;
 
@@ -529,9 +269,6 @@ namespace GenshinMusicPlayer
                     return;
                 }
 
-                // Disable load button here to avoid that we need to enable it again and again at the returns above.
-                ButtonLoadMidiFile.IsEnabled = false;
-
                 WrapPanelHistoryNotes.Children.Clear();
                 ProgressBarPlay.Value = 0;
 
@@ -543,57 +280,81 @@ namespace GenshinMusicPlayer
                 }
                 noteMergingTime = (long)parseResult;
 
-                Thread thread = new Thread(PlayMusic);
-                thread.IsBackground = true;
-                thread.Start();
+                var cancellation = new CancellationTokenSource();
+                playbackCancellation = cancellation;
+                SetConfigurationEnabled(false);
+                ButtonStart.Content = "停止演奏";
+                ButtonStart.IsEnabled = true;
+                try
+                {
+                    await Task.Run(() => PlayMusic(cancellation.Token));
+                }
+                catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+                {
+                    // A requested stop is normal completion of this session.
+                }
+                catch (PlaybackTargetException ex)
+                {
+                    if (!isWindowClosed) TextBoxCurrentNote.Text = "演奏已停止：" + ex.Message;
+                }
+                catch (Exception ex)
+                {
+                    if (!isWindowClosed)
+                    {
+                        TextBoxCurrentNote.Text = "演奏已停止：" + ex.Message;
+                        MessageBox.Show("演奏失败：" + ex.Message);
+                    }
+                }
+                finally
+                {
+                    playbackCancellation = null;
+                    cancellation.Dispose();
+                    if (!isWindowClosed)
+                    {
+                        ButtonStart.Content = "开始演奏";
+                        ButtonStart.IsEnabled = true;
+                        SetConfigurationEnabled(true);
+                    }
+                }
             }
             else
             {
-                isPlaying = false;
+                // Repeated hotkeys while stopping must not start a second worker.
+                if (!playbackCancellation.IsCancellationRequested)
+                {
+                    ButtonStart.Content = "正在停止……";
+                    ButtonStart.IsEnabled = false;
+                    playbackCancellation.Cancel();
+                }
             }
         }
 
-        private void PlayMusic()
+        private async Task PlayMusic(CancellationToken cancellationToken)
         {
-            Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
-            {
-                ButtonStart.Content = "停止演奏";
-                ButtonStart.IsEnabled = true;
-                isPlaying = true;
-            });
+            cancellationToken.ThrowIfCancellationRequested();
 
             // Switch to Genshin window and wait...
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
                 TextBoxCurrentNote.Text = "正在将原神窗口切换到前台……";
             });
-            foreach (var process in Process.GetProcesses())
-            {
-                if (process.ProcessName == "YuanShen")
-                {
-                    SwitchToThisWindow(process.MainWindowHandle, true);
-                    break;
-                }
-            }
-            if (!isPlaying) goto STOP_PLAYING;
+            var target = PlaybackTarget.FindGameWindow();
+            await target.ActivateAsync(cancellationToken).ConfigureAwait(false);
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
                 TextBoxCurrentNote.Text = "3 秒后开始……";
             });
-            Thread.Sleep(1000);
-            if (!isPlaying) goto STOP_PLAYING;
+            await target.DelayAsync(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
                 TextBoxCurrentNote.Text = "2 秒后开始……";
             });
-            Thread.Sleep(1000);
-            if (!isPlaying) goto STOP_PLAYING;
+            await target.DelayAsync(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
                 TextBoxCurrentNote.Text = "1 秒后开始……";
             });
-            Thread.Sleep(1000);
-            if (!isPlaying) goto STOP_PLAYING;
+            await target.DelayAsync(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
                 TextBoxCurrentNote.Text = "";
@@ -604,7 +365,7 @@ namespace GenshinMusicPlayer
             int noteIdx = 0;
             while (noteIdx < notes.Count)
             {
-                if (!isPlaying) goto STOP_PLAYING;
+                target.EnsureForeground(cancellationToken);
 
                 var nextTimeToBePlayed = startTime + TimeSpan.FromMilliseconds(notes[noteIdx].Time);
 
@@ -627,24 +388,27 @@ namespace GenshinMusicPlayer
                         keysToPress.Add(noteToPlay.VirtualKeyCodePress.Value);
                     }
                 }
-                if (!isPlaying) goto STOP_PLAYING;
+                cancellationToken.ThrowIfCancellationRequested();
 
                 // Wait and press
                 var timeToSleep = nextTimeToBePlayed - DateTime.Now;
                 if (timeToSleep > TimeSpan.FromSeconds(0))
                 {
-                    Thread.Sleep(timeToSleep);
+                    await target.DelayAsync(timeToSleep, cancellationToken).ConfigureAwait(false);
                 }
-                if (!isPlaying) goto STOP_PLAYING;
+                target.EnsureForeground(cancellationToken);
                 if (keysToPress.Count > 0)
                 {
-                    sim.Keyboard.KeyPress(keysToPress.ToArray());
+                    var keys = keysToPress.ToArray();
+                    target.Send(() => sim.Keyboard.KeyPress(keys), cancellationToken);
                 }
 
                 // Update UI
                 Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
                 {
-                    ProgressBarPlay.Value = (nextTimeToBePlayed - startTime).TotalMilliseconds / maxNoteOffTime * 100;
+                    ProgressBarPlay.Value = maxNoteOffTime > 0
+                        ? (nextTimeToBePlayed - startTime).TotalMilliseconds / maxNoteOffTime * 100
+                        : 0;
                     TextBoxCurrentNote.Text = notesToPlay.Aggregate("", (text, noteToPlay) => text + " " + noteToPlay.ToString()).Substring(1);
                     WrapPanelHistoryNotes.Children.Add(new TextBox() { Text = TextBoxCurrentNote.Text, Margin = new Thickness(2, 2, 2, 2) });
                     ScrollViewerHistoryNotes.ScrollToBottom();
@@ -657,24 +421,23 @@ namespace GenshinMusicPlayer
             {
                 ProgressBarPlay.Value = 100;
             });
-            isPlaying = false;
-
-            STOP_PLAYING:;
-            Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
-            {
-                ButtonStart.Content = "开始演奏";
-                ButtonStart.IsEnabled = true;
-                ButtonLoadMidiFile.IsEnabled = true;
-            });
         }
 
         private void ButtonLoadMidiFile_Click(object sender, RoutedEventArgs e)
         {
+            if (playbackCancellation != null) return;
+
             OpenFileDialog openMidiFileDialog = new OpenFileDialog();
             openMidiFileDialog.Filter = "MIDI 文件 (*.mid;*.midi)|*.mid;*.midi";
-            if (openMidiFileDialog.ShowDialog() == true)
+            var selectedFile = openMidiFileDialog.ShowDialog() == true
+                ? openMidiFileDialog.FileName
+                : null;
+            // A global hotkey can start playback while the file dialog is open.
+            if (playbackCancellation != null) return;
+
+            if (selectedFile != null)
             {
-                LoadMidiFile(openMidiFileDialog.FileName);
+                LoadMidiFile(selectedFile);
             }
             UpdateComboBoxTone();
         }
