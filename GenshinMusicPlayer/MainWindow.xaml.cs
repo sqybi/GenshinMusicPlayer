@@ -32,55 +32,6 @@ namespace GenshinMusicPlayer
         }
     }
 
-    public class Note : IComparable
-    {
-        private static string[] convertNoteNumberToName = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
-        public static string GetNoteName(int noteNumber)
-        {
-            return convertNoteNumberToName[noteNumber % 12] + (noteNumber / 12).ToString();
-        }
-
-        public double Time { get; private set; }
-        public int Number { get; private set; }
-        public string Name
-        {
-            get
-            {
-                return GetNoteName(Number);
-            }
-        }
-
-        int IComparable.CompareTo(object obj)
-        {
-            Note note = (Note)obj;
-            var compareTime = Time.CompareTo(note.Time);
-            if (compareTime == 0)
-            {
-                return Number.CompareTo(note.Number);
-            }
-            else
-            {
-                return compareTime;
-            }
-        }
-
-        public Note(Note note)
-        {
-            Time = note.Time;
-            Number = note.Number;
-        }
-
-        public Note(double time, int number)
-        {
-            if (number < 0)
-            {
-                throw new Exception("Illegal note number");
-            }
-            Time = time;
-            Number = number;
-        }
-    }
-
     public class NoteToPlay : Note
     {
         // Modifcation:
@@ -370,73 +321,43 @@ namespace GenshinMusicPlayer
 
         private void LoadMidiFileInfo(MidiFile file)
         {
-            Note minNote = null;
-            Note maxNote = null;
-            maxNoteOffTime = 0;
-
-            // Load File
-            double? quarterNoteTime = null;
-            bool errorFlag = false;
-            for (int track = 0; track < file.Tracks; track++)
-            {
-                foreach (var midiEvent in file.Events[track].OfType<TempoEvent>())
-                {
-                    if (!quarterNoteTime.HasValue)
-                    {
-                        quarterNoteTime = 60.0 / midiEvent.Tempo;
-                    }
-                    else
-                    {
-                        errorFlag = true;
-                    }
-                }
-            }
-            if (errorFlag)
-            {
-                MessageBox.Show(String.Format("MIDI 文件包含多于一个的速度标识，暂时不支持，会使用第一个速度 {0:F1} bpm。", quarterNoteTime));
-            }
-            if (!quarterNoteTime.HasValue)
-            {
-                MessageBox.Show("MIDI 文件中未找到速度标识，会使用默认速度 120 bpm。");
-                quarterNoteTime = 60.0 / 120.0;
-            }
-
-            notes = new List<Note>();
-            for (int track = 0; track < file.Tracks; track++)
-            {
-                foreach (var midiEvent in file.Events[track].OfType<NoteOnEvent>())
-                {
-                    if (MidiEvent.IsNoteOn(midiEvent))
-                    {
-                        double startTime = (double)midiEvent.AbsoluteTime / file.DeltaTicksPerQuarterNote * quarterNoteTime.Value * 1000;
-                        double stopTime = (double)midiEvent.OffEvent.AbsoluteTime / file.DeltaTicksPerQuarterNote * quarterNoteTime.Value * 1000;
-                        var currentNote = new Note(startTime, midiEvent.NoteNumber);
-                        notes.Add(currentNote);
-                        if (minNote == null || currentNote.Number < minNote.Number) minNote = currentNote;
-                        if (maxNote == null || currentNote.Number > maxNote.Number) maxNote = currentNote;
-                        if (stopTime > maxNoteOffTime) maxNoteOffTime = stopTime;
-                    }
-                }
-            }
-            notes.Sort();
+            var analysis = MidiFileAnalysis.Analyze(file);
 
             // Read file properties
+            notes = analysis.Notes;
+            maxNoteOffTime = analysis.LastNoteOffTime;
             midiFileProperties.Clear();
             midiFileProperties.Add(new MidiFileProperty() { Name = "总音符数量", Value = notes.Count.ToString() });
-            midiFileProperties.Add(new MidiFileProperty() { Name = "最低音符", Value = minNote.Name });
-            midiFileProperties.Add(new MidiFileProperty() { Name = "最高音符", Value = maxNote.Name });
+            midiFileProperties.Add(new MidiFileProperty() { Name = "最低音符", Value = analysis.MinNote.Name });
+            midiFileProperties.Add(new MidiFileProperty() { Name = "最高音符", Value = analysis.MaxNote.Name });
             midiFileProperties.Add(new MidiFileProperty() { Name = "文件时长", Value = string.Format("{0:F3} 秒", maxNoteOffTime / 1000.0) });
             ListViewFileProperties.ItemsSource = midiFileProperties;
+            if (analysis.HasMultipleTempos)
+            {
+                MessageBox.Show(String.Format("MIDI 文件包含多于一个的速度标识，暂时不支持，会使用第一个速度 {0:F1} bpm。", analysis.FirstTempo));
+            }
+            if (!analysis.HasTempo)
+            {
+                MessageBox.Show("MIDI 文件中未找到速度标识，会使用默认速度 120 bpm。");
+            }
         }
 
         private void LoadMidiFile(string fileName)
         {
             if (fileName != "")
             {
-                midiFile = new MidiFile(fileName);
-                LoadMidiFileInfo(midiFile);
-                midiFilePath = fileName;
-                TextBoxCurrentFileName.Text = midiFilePath;
+                try
+                {
+                    var loadedFile = new MidiFile(fileName);
+                    LoadMidiFileInfo(loadedFile);
+                    midiFile = loadedFile;
+                    midiFilePath = fileName;
+                    TextBoxCurrentFileName.Text = midiFilePath;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("无法加载 MIDI 文件：" + ex.Message);
+                }
             }
             else
             {
@@ -671,7 +592,9 @@ namespace GenshinMusicPlayer
                 // Update UI
                 Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
                 {
-                    ProgressBarPlay.Value = (nextTimeToBePlayed - startTime).TotalMilliseconds / maxNoteOffTime * 100;
+                    ProgressBarPlay.Value = maxNoteOffTime > 0
+                        ? (nextTimeToBePlayed - startTime).TotalMilliseconds / maxNoteOffTime * 100
+                        : 0;
                     TextBoxCurrentNote.Text = notesToPlay.Aggregate("", (text, noteToPlay) => text + " " + noteToPlay.ToString()).Substring(1);
                     WrapPanelHistoryNotes.Children.Add(new TextBox() { Text = TextBoxCurrentNote.Text, Margin = new Thickness(2, 2, 2, 2) });
                     ScrollViewerHistoryNotes.ScrollToBottom();
