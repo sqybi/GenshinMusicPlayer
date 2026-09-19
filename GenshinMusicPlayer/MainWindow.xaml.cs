@@ -9,6 +9,7 @@ using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
@@ -292,7 +293,9 @@ namespace GenshinMusicPlayer
         private bool? isHigherFirst;  // Null means ignore; true means higher semitone first; false means lower first.
         private long noteMergingTime;
 
-        private bool isPlaying = false;
+        // Accessed only on the UI thread; keep the session until its worker has exited.
+        private CancellationTokenSource playbackCancellation;
+        private bool isWindowClosed;
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern bool SwitchToThisWindow(IntPtr hWnd, bool fAltTab);
@@ -322,6 +325,8 @@ namespace GenshinMusicPlayer
 
         protected override void OnClosed(EventArgs e)
         {
+            isWindowClosed = true;
+            playbackCancellation?.Cancel();
             hwndSource.RemoveHook(HwndHook);
             hwndSource = null;
             UnregisterHotKey();
@@ -478,9 +483,11 @@ namespace GenshinMusicPlayer
             }
         }
 
-        private void SwitchPlayingStatus()
+        private async void SwitchPlayingStatus()
         {
-            if (!isPlaying)
+            if (isWindowClosed) return;
+
+            if (playbackCancellation == null)
             {
                 ButtonStart.IsEnabled = false;
 
@@ -543,24 +550,49 @@ namespace GenshinMusicPlayer
                 }
                 noteMergingTime = (long)parseResult;
 
-                Thread thread = new Thread(PlayMusic);
-                thread.IsBackground = true;
-                thread.Start();
+                var cancellation = new CancellationTokenSource();
+                playbackCancellation = cancellation;
+                ButtonStart.Content = "停止演奏";
+                ButtonStart.IsEnabled = true;
+                try
+                {
+                    await Task.Run(() => PlayMusic(cancellation.Token));
+                }
+                catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+                {
+                    // A requested stop is normal completion of this session.
+                }
+                catch (Exception ex)
+                {
+                    if (!isWindowClosed) MessageBox.Show("演奏失败：" + ex.Message);
+                }
+                finally
+                {
+                    playbackCancellation = null;
+                    cancellation.Dispose();
+                    if (!isWindowClosed)
+                    {
+                        ButtonStart.Content = "开始演奏";
+                        ButtonStart.IsEnabled = true;
+                        ButtonLoadMidiFile.IsEnabled = true;
+                    }
+                }
             }
             else
             {
-                isPlaying = false;
+                // Repeated hotkeys while stopping must not start a second worker.
+                if (!playbackCancellation.IsCancellationRequested)
+                {
+                    ButtonStart.Content = "正在停止……";
+                    ButtonStart.IsEnabled = false;
+                    playbackCancellation.Cancel();
+                }
             }
         }
 
-        private void PlayMusic()
+        private async Task PlayMusic(CancellationToken cancellationToken)
         {
-            Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
-            {
-                ButtonStart.Content = "停止演奏";
-                ButtonStart.IsEnabled = true;
-                isPlaying = true;
-            });
+            cancellationToken.ThrowIfCancellationRequested();
 
             // Switch to Genshin window and wait...
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
@@ -575,25 +607,25 @@ namespace GenshinMusicPlayer
                     break;
                 }
             }
-            if (!isPlaying) goto STOP_PLAYING;
+            cancellationToken.ThrowIfCancellationRequested();
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
                 TextBoxCurrentNote.Text = "3 秒后开始……";
             });
-            Thread.Sleep(1000);
-            if (!isPlaying) goto STOP_PLAYING;
+            await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
                 TextBoxCurrentNote.Text = "2 秒后开始……";
             });
-            Thread.Sleep(1000);
-            if (!isPlaying) goto STOP_PLAYING;
+            await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
                 TextBoxCurrentNote.Text = "1 秒后开始……";
             });
-            Thread.Sleep(1000);
-            if (!isPlaying) goto STOP_PLAYING;
+            await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
                 TextBoxCurrentNote.Text = "";
@@ -604,7 +636,7 @@ namespace GenshinMusicPlayer
             int noteIdx = 0;
             while (noteIdx < notes.Count)
             {
-                if (!isPlaying) goto STOP_PLAYING;
+                cancellationToken.ThrowIfCancellationRequested();
 
                 var nextTimeToBePlayed = startTime + TimeSpan.FromMilliseconds(notes[noteIdx].Time);
 
@@ -627,15 +659,15 @@ namespace GenshinMusicPlayer
                         keysToPress.Add(noteToPlay.VirtualKeyCodePress.Value);
                     }
                 }
-                if (!isPlaying) goto STOP_PLAYING;
+                cancellationToken.ThrowIfCancellationRequested();
 
                 // Wait and press
                 var timeToSleep = nextTimeToBePlayed - DateTime.Now;
                 if (timeToSleep > TimeSpan.FromSeconds(0))
                 {
-                    Thread.Sleep(timeToSleep);
+                    await Task.Delay(timeToSleep, cancellationToken).ConfigureAwait(false);
                 }
-                if (!isPlaying) goto STOP_PLAYING;
+                cancellationToken.ThrowIfCancellationRequested();
                 if (keysToPress.Count > 0)
                 {
                     sim.Keyboard.KeyPress(keysToPress.ToArray());
@@ -656,15 +688,6 @@ namespace GenshinMusicPlayer
             Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
             {
                 ProgressBarPlay.Value = 100;
-            });
-            isPlaying = false;
-
-            STOP_PLAYING:;
-            Dispatcher.Invoke(DispatcherPriority.Normal, (ThreadStart)delegate ()
-            {
-                ButtonStart.Content = "开始演奏";
-                ButtonStart.IsEnabled = true;
-                ButtonLoadMidiFile.IsEnabled = true;
             });
         }
 
