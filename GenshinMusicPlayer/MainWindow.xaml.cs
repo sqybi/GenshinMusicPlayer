@@ -50,6 +50,7 @@ namespace GenshinMusicPlayer
         private int tone;
         private bool? isHigherFirst;  // Null means ignore; true means higher semitone first; false means lower first.
         private long noteMergingTime;
+        private const double LongPressRetriggerGapMilliseconds = 40;
 
         // Accessed only on the UI thread; keep the session until its worker has exited.
         private CancellationTokenSource playbackCancellation;
@@ -368,10 +369,6 @@ namespace GenshinMusicPlayer
             {
                 while (noteIdx < notes.Count)
                 {
-                    if (instrument.SupportsLongPress)
-                    {
-                        await ReleaseHeldKeysUntilAsync(target, startTime, notes[noteIdx].Time, heldKeys, cancellationToken).ConfigureAwait(false);
-                    }
                     target.EnsureForeground(cancellationToken);
 
                     var nextTimeToBePlayed = startTime + TimeSpan.FromMilliseconds(notes[noteIdx].Time);
@@ -403,6 +400,20 @@ namespace GenshinMusicPlayer
                         }
                     }
                     cancellationToken.ThrowIfCancellationRequested();
+
+                    if (instrument.SupportsLongPress)
+                    {
+                        // A repeated key needs a visible key-up interval before the next key-down.
+                        foreach (var key in keyEndTimes.Keys)
+                        {
+                            double endTime;
+                            if (heldKeys.TryGetValue(key, out endTime))
+                            {
+                                heldKeys[key] = Math.Min(endTime, notes[noteIdx].Time - LongPressRetriggerGapMilliseconds);
+                            }
+                        }
+                        await ReleaseHeldKeysUntilAsync(target, startTime, notes[noteIdx].Time, heldKeys, cancellationToken).ConfigureAwait(false);
+                    }
 
                     // Wait and press
                     var timeToSleep = nextTimeToBePlayed - DateTime.Now;
